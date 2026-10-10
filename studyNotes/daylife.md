@@ -22,8 +22,45 @@
   
      git push -u origin main --force
 
-​  3.每次更新都要
+  3.每次更新都要
 
 ​      git add .
 ​      git commit -m "写清楚你改了什么"
 ​      git push
+
+
+
+【Day 2 打卡】
+
+日期：2026/10/10
+
+一、今日主线任务
+
+【Day 2 打卡】
+- [x] 成功创建 Spring Boot 项目
+- [x] 项目能在 IDEA 中启动
+- [x] 浏览器成功访问 /hello
+- [x] 已完成 Git commit
+- [x] 代码已推送至 GitHub
+- [x] 完成 10 分钟英语阅读和 3 句摘抄
+
+二、今日产出
+
+- 接口地址：http://localhost:8080/hello
+  Git commit：Init Spring Boot project and add hello endpoint
+
+- 踩坑与解决记录：
+
+  遇到问题：IntelliJ IDEA 使用的 Maven Wrapper 版本与IDEA自带的Maven集成不兼容。
+
+   
+
+  解决办法：
+
+  第一步：修改IDEA的Maven配置
+
+  修改Maven home path
+
+  将原来的Use Maven Wrapper改成Bundled Maven 3（如果显示具体版本号，就选择IDEA自带的Maven 3.x）。
+
+  第二步：重新加载项目
