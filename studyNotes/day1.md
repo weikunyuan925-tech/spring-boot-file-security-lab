@@ -22,8 +22,8 @@
   
      git push -u origin main --force
 
-​         3.每次更新都要
+​  3.每次更新都要
 
-​              git add .
-​              git commit -m "写清楚你改了什么"
-​              git push
+​      git add .
+​      git commit -m "写清楚你改了什么"
+​      git push
