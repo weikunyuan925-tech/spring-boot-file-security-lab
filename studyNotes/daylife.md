@@ -73,8 +73,6 @@
 
 一、今日完成
 
-创建数据库
-
 - [x] 创建数据库
 - [x] 创建 sys_user 表
 - [x] 项目连接 MySQL 成功
@@ -87,9 +85,41 @@
 
 1.配置文件：application.properties 与配置文件：application.yml格式不同，注意区分
 
-2.
-
-3
 
 
+【Day 4 打卡】
 
+日期：2026/10/12
+
+一、今日完成
+- [x] 完成 /api/user/register
+- [x] 用户名重复校验
+- [x] 参数非空校验
+- [x] Postman 测试成功
+- [x] 已提交 Git
+
+二、今日问题
+
+1.MyBatis-Plus里看到lambdaQuery，它通常指：Wrappers.lambdaQuery()也就是创建一个LambdaQueryWrapper，用来构建类型安全的查询条件。
+
+ 
+
+2.Wrappers.<SysUser>lambdaQuery()用Lambda方法引用构建查询条件的工具，返回LambdaQueryWrapper，比字符串写字段名更安全、更优雅。
+
+ 
+
+3.:: 是Java的方法引用语法：在MyBatis-Plus里，User::getName的意思是：引用User类的getName方法，让框架推导出字段name
+
+ 
+
+4.为什么直接URL?后面加参数无法查询？
+
+因为我的Controller方法参数前面加了@RequestBody，它只认请求体（Body），不认URL查询参数（Query Params）。
+
+@RequestParam  URL?后面 一般用于查询条件，如/list?page=1&size=10。
+
+@RequestBody  安全，标准写法
+
+ 
+
+5.isEmpty()和isBlank()的区别,isBlank是java11专门用于判断字符串是不是空白字符串。可以排除掉空格
