@@ -64,3 +64,32 @@
   将原来的Use Maven Wrapper改成Bundled Maven 3（如果显示具体版本号，就选择IDEA自带的Maven 3.x）。
 
   第二步：重新加载项目
+
+
+
+【Day 3 打卡】
+
+ 日期：2026/10/11
+
+一、今日完成
+
+创建数据库
+
+- [x] 创建数据库
+- [x] 创建 sys_user 表
+- [x] 项目连接 MySQL 成功
+- [x] 创建 SysUser 实体
+- [x] 创建 SysUserMapper
+- [x] 测试查询或插入成功
+- [x]  已提交 Git
+
+二、今日问题
+
+1.配置文件：application.properties 与配置文件：application.yml格式不同，注意区分
+
+2.
+
+3
+
+
+

@@ -29,3 +29,27 @@ Spring Boot 让创建**独立运行**的应用程序变得更加容易。
 \3. The **embedded** server allows the application to run without **external deployment**.
 
 **内嵌**服务器让应用程序无需部署到**外部服务器**也能运行。
+
+
+
+Spring Boot makes it easy to create stand-alone, production-grade Spring based Applications that you can "just run".
+
+We take an opinionated view of the Spring platform and third-party libraries so you can get started with minimum fuss. Most Spring Boot applications need minimal Spring configuration.
+
+If you’re looking for information about a specific version, or instructions about how to upgrade from an earlier release, check out [the project release notes section on our wiki.
+
+
+
+notes section
+project release
+check out
+release
+minimal
+minimum fuss
+fuss
+minimum
+libraries
+opinionated
+production-grade
+
+已加入单词本
