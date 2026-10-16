@@ -1,14 +1,37 @@
-Day 1
-准备环境，创建GitHub仓库 (spring-boot-file-security-lab)
+# Spring Boot File Security Lab
 
-Day 2
-创建 Spring Boot 项目，功访问 /hello
+This project is a Java application security learning project.
 
-Day 3
-创建数据库，创建 sys_user 表，项目连接 MySQL 成功，创建 SysUser 实体，创建 SysUserMapper
+It is based on Spring Boot, MySQL, and MyBatis-Plus.
 
-Day 4
-完成 /api/user/register，用户名重复校验，参数非空校验
+The goal is to learn common Java web vulnerabilities and how to fix them.
 
-Day 5
-登录接口完成,登录成功返回 Token ,简单 Token 存储完成 ,/api/user/me 可获取当前用户检测是否有携带token，拦截器可拦截无效 Token
+## Features
+
+- User registration
+- User login
+- Simple token authentication
+- File upload
+
+## Tech Stack
+
+- Java 17
+- Spring Boot
+- MyBatis-Plus
+- MySQL
+- Maven
+- Postman
+
+## Security Notes
+
+This project intentionally contains some insecure implementations for learning purposes.
+
+These issues will be audited and fixed step by step.
+
+Known issues:
+
+- Password is stored in plain text
+- Login endpoint has no rate limit
+- File upload validation is weak
+- Token is stored in memory
+- Some sensitive configuration may be hardcoded

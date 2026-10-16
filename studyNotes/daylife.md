@@ -152,3 +152,28 @@
 ConcurrentHashMap：支持并发安全访问的键值对集合。
 
 tokenStore：你在这个项目中用来保存 Token → 用户ID关系的具体变量。
+
+
+
+【Day 6 打卡】
+
+2026/10/16
+
+一、今日完成
+- [x] 创建 file_info 表
+- [x] 完成 /api/file/upload
+- [x] 文件能保存到本地
+- [x] 数据库能记录文件信息
+- [x] 需要 Token 才能上传
+- [x] Postman 测试成功
+- [x] 已提交 Git
+
+二、问题
+
+1.没有直接使用用户提供的原始文件名作为磁盘文件名，而是单独设置 stored_name，后续可以使用随机 UUID 生成存储名，降低文件名冲突和路径穿越风险
+
+2.
+
+@Mapper
+public interface FileInfoMapper extends BaseMapper<FileInfo> {}中为什么里面没有写SQL？
+因为BaseMapper<FileInfo>已经提供了常用数据库操作
