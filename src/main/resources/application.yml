@@ -8,6 +8,15 @@ spring:
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
 
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
+
+file:
+  upload-dir: uploads
+#  //- uploads 表示项目运行时的当前工作目录下的uploads文件夹。上传的实际文件会保存在本地磁盘，而不是存进MySQL。

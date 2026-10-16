@@ -123,3 +123,32 @@
  
 
 5.isEmpty()和isBlank()的区别,isBlank是java11专门用于判断字符串是不是空白字符串。可以排除掉空格
+
+
+
+【Day 5 打卡】
+
+一、今日完成
+- [x] 登录接口完成
+- [x] 登录成功返回 Token
+- [x] 简单 Token 存储完成
+- [x] /api/user/me 可获取当前用户
+- [x] 拦截器可拦截无效 Token
+- [x] Postman 测试成功
+- [x] 已提交 Git
+
+二、今日问题
+
+1.关键点：request.getHeader("token")：从请求头读取Token。
+
+​                   tokenService.getUserId(token)：检查Token是否存在。走拦截器的逻辑
+
+​                   request.setAttribute("userId", userId)：把服务端验证过的用户ID传给Controller
+
+2.键值对保存token，目前先使用内存存储
+
+（缺点：重启丢失，多实例不同步；如果项目部署在两台服务器上，两台服务器的 Map 不会自动共享；无法自动过期：你当前的代码没有设置过期时间）
+
+ConcurrentHashMap：支持并发安全访问的键值对集合。
+
+tokenStore：你在这个项目中用来保存 Token → 用户ID关系的具体变量。
