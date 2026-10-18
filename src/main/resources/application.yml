@@ -19,4 +19,4 @@ mybatis-plus:
 
 file:
   upload-dir: uploads
-#  //- uploads 表示项目运行时的当前工作目录下的uploads文件夹。上传的实际文件会保存在本地磁盘，而不是存进MySQL。
+#  uploads 表示项目运行时的当前工作目录下的uploads文件夹。上传的实际文件会保存在本地磁盘，而不是存进MySQL。

@@ -8,13 +8,15 @@ import com.example.filelab.service.FileService;
 import com.example.filelab.service.TokenService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
@@ -29,68 +31,46 @@ public class FileController {
     private final FileInfoMapper fileInfoMapper;
     private final FileService fileService;
     private final TokenService tokenService;
+    @Value("${file.upload-dir:uploads}")
+    private String uploadDir;
 
-
-    public FileController(
-            FileInfoMapper fileInfoMapper, FileService fileService,
-            TokenService tokenService) {
+    public FileController(FileInfoMapper fileInfoMapper, FileService fileService, TokenService tokenService) {
         this.fileInfoMapper = fileInfoMapper;
         this.fileService = fileService;
         this.tokenService = tokenService;
     }
 
-    @Value("${file.upload-dir:uploads}")
-    private String uploadDir;
-
-
     @GetMapping("/list")
-    public ResponseEntity<Result<List<FileListItemDTO>>> listFiles(
-            @RequestHeader(
-                    value = "Authorization",
-                    required = false
-            ) String authorization) {
+    public ResponseEntity<Result<List<FileListItemDTO>>> listFiles(@RequestHeader(value = "Authorization", required = false) String authorization) {
 
         // 1. 检查 Authorization 请求头
-        if (authorization == null
-                || !authorization.startsWith("Bearer ")) {
-            return ResponseEntity
-                    .status(HttpStatus.UNAUTHORIZED)
-                    .body(Result.<List<FileListItemDTO>>failure(
-                            401, "缺少或无效的Token"));
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Result.<List<FileListItemDTO>>failure(401, "缺少或无效的Token"));
         }
 
         // 2. 提取 Token
         String token = authorization.substring(7).trim();
 
         if (token.isEmpty()) {
-            return ResponseEntity
-                    .status(HttpStatus.UNAUTHORIZED)
-                    .body(Result.<List<FileListItemDTO>>failure(
-                            401, "缺少或无效的Token"));
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Result.<List<FileListItemDTO>>failure(401, "缺少或无效的Token"));
         }
 
         // 3. 通过服务器端 Token 存储识别当前用户
         Long userId = tokenService.getUserId(token);
 
         if (userId == null) {
-            return ResponseEntity
-                    .status(HttpStatus.UNAUTHORIZED)
-                    .body(Result.<List<FileListItemDTO>>failure(
-                            401, "缺少或无效的Token"));
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Result.<List<FileListItemDTO>>failure(401, "缺少或无效的Token"));
         }
 
         // 4. 只查询当前用户的文件
-        List<FileListItemDTO> files =
-                fileService.listByUserId(userId);
+        List<FileListItemDTO> files = fileService.listByUserId(userId);
 
         // 5. 返回结果
         return ResponseEntity.ok(Result.success(files));
     }
 
     @PostMapping("/upload")
-    public Result<?> upload(
-            @RequestParam("file") MultipartFile file,
-            HttpServletRequest request) {
+    public Result<?> upload(@RequestParam("file") MultipartFile file, HttpServletRequest request) {
 
         if (file.isEmpty()) {
             return Result.error(400, "请选择要上传的文件");
@@ -107,9 +87,7 @@ public class FileController {
 
         try {
             // 创建上传目录
-            Path directory = Paths.get(uploadDir)
-                    .toAbsolutePath()
-                    .normalize();
+            Path directory = Paths.get(uploadDir).toAbsolutePath().normalize();
 
             Files.createDirectories(directory);
 
@@ -151,12 +129,7 @@ public class FileController {
                 return Result.error(500, "文件信息保存失败");
             }
 
-            return Result.success("上传成功", Map.of(
-                    "id", info.getId(),
-                    "originalName", info.getOriginalName(),
-                    "storedName", info.getStoredName(),
-                    "fileSize", info.getFileSize()
-            ));
+            return Result.success("上传成功", Map.of("id", info.getId(), "originalName", info.getOriginalName(), "storedName", info.getStoredName(), "fileSize", info.getFileSize()));
 
         } catch (IOException e) {
             // 如果保存过程中发生 IO 错误，尝试清理已创建的文件
@@ -168,6 +141,65 @@ public class FileController {
                 }
             }
             return Result.error(500, "文件保存失败");
+        }
+    }
+
+    @GetMapping("/download/{fileId}")
+    public ResponseEntity<?> downloadFile(@PathVariable Long fileId, @RequestHeader(value = "Authorization", required = false) String authorization) {
+
+        // 1. 检查 Authorization 请求头
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Result.failure(401, "缺少或无效的Token"));
+        }
+
+        // 2. 提取 Token
+        String token = authorization.substring(7).trim();
+
+        if (token.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Result.failure(401, "缺少或无效的Token"));
+        }
+
+        // 3. 根据 Token 获取当前用户 ID
+        Long userId = tokenService.getUserId(token);
+
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Result.failure(401, "缺少或无效的Token"));
+        }
+
+        // 4. 查询当前用户拥有的文件
+        FileInfo fileInfo = fileService.getOwnedFile(fileId, userId);
+
+        if (fileInfo == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Result.failure(404, "文件不存在"));
+        }
+
+        // 5. 验证文件物理路径并读取文件
+        try {
+            Path rootPath = Paths.get(uploadDir).toRealPath();
+
+            Path realFilePath = Paths.get(fileInfo.getFilePath()).toRealPath();
+
+            // 确保文件在配置的上传目录内
+            if (!realFilePath.startsWith(rootPath) || !Files.isRegularFile(realFilePath) || !Files.isReadable(realFilePath)) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Result.failure(404, "文件不存在"));
+            }
+
+            // 6. 设置下载文件名
+            String downloadName = fileInfo.getOriginalName();
+
+            if (downloadName == null || downloadName.isBlank()) {
+                downloadName = "download";
+            }
+
+            FileSystemResource resource = new FileSystemResource(realFilePath);
+
+            String disposition = ContentDisposition.attachment().filename(downloadName, StandardCharsets.UTF_8).build().toString();
+
+            // 7. 返回文件内容
+            return ResponseEntity.ok().contentType(MediaType.APPLICATION_OCTET_STREAM).header(HttpHeaders.CONTENT_DISPOSITION, disposition).contentLength(Files.size(realFilePath)).body(resource);
+
+        } catch (IOException | InvalidPathException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Result.failure(404, "文件不存在"));
         }
     }
 

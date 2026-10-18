@@ -1,4 +1,4 @@
-【Day 1 打卡】
+****【Day 1 打卡】
 
 日期：2026/10/9
 
@@ -182,3 +182,46 @@ public interface FileInfoMapper extends BaseMapper<FileInfo> {}中为什么里�
 
 
 
+2026/10/18
+
+一、今日完成
+
+- [x] 确认 file_info 数据表和 FileInfo 实体类。
+
+
+- [x] 编写 **GET /api/file/list 接口**。
+
+
+- [x]  从请求中的 Token 获取当前用户的 userId。
+
+
+- [x]  查询数据库，只返回当前用户上传的文件。
+
+
+- [x]  统一使用项目中的 Result 封装响应。
+
+- [x] 完成**文件下载接口 Get  /api/file/download/{fileId}**
+
+- [x] 使用 Postman 测试文件下载
+
+- [x] 文件下载的身份验证与文件权限控制
+
+二、问题
+
+1.**Authorization: Bearer** 4287c22b-24ed-4e23-90af-eb91667ed20f
+
+Authorization  ---->  HTTP 请求头的名称，表示提供身份认证凭据
+
+Bearer   ---->  认证方案，表示后面跟着一个持有者 Token
+
+4287c22b-24ed-4e23-90af-eb91667ed20f   ---->    Token
+
+这是一种常见的 **API 认证约定**，但你的后端也可以设计成其他格式。关键是客户端和服务器必须约定一致。后接入 Spring Security 或 JWT 时，也很容易理解和迁移。
+
+2.下载文件关键
+
+身份认证： 通过 Token 确定当前用户是谁。
+
+权限控制： 查询时同时匹配 fileId 和 userId，避免越权下载。
+
+文件路径限制： 只允许读取配置上传目录中的真实文件。

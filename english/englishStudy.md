@@ -100,3 +100,14 @@ Features
 Infrastructure for building repositories on top of key/value implementations.
 java.util.function.Predicate based query generation from query method names.
 Possibility to integrate custom repository code.
+
+
+
+Spring Data for Spring LDAP is part of the umbrella Spring Data project which aims to provide a familiar and consistent Repository abstractions for new Spring LDAP.
+
+The Spring Data LDAP project provides repository abstractions for Spring LDAP on top of Spring LDAP’s LdapTemplate and Object-Directory Mapping.
+
+Configuration: Spring configuration support using Java-based @Configuration classes or an XML namespace.
+Rich Object Mapping: Annotation based mapping metadata
+Repositories: Automatic implementation of Repository interfaces including support for custom query methods.
+Querydsl: Querydsl integration to support type-safe queries.
