@@ -92,3 +92,11 @@ Spring Data JPA aims to significantly improve the implementation of data access 
 
 
 
+The primary goal of the Spring Data project is to make it easier to build Spring-powered applications that use new data access technologies such as non-relational databases, map-reduce frameworks, and cloud based data services.
+
+This module provides infrastructure components to build repository abstractions for stores dealing with Key/Value pairs and ships with a default java.util.Map based implementation.
+
+Features
+Infrastructure for building repositories on top of key/value implementations.
+java.util.function.Predicate based query generation from query method names.
+Possibility to integrate custom repository code.

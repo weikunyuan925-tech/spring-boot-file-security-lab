@@ -22,6 +22,8 @@ public class FileInfo {
     private String contentType;
     private LocalDateTime createTime;
 
+
+
     public Long getId() {
         return id;
     }
@@ -85,4 +87,5 @@ public class FileInfo {
     public void setCreateTime(LocalDateTime createTime) {
         this.createTime = createTime;
     }
+
 }

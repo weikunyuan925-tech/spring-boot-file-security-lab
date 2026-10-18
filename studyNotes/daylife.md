@@ -165,8 +165,10 @@ tokenStore：你在这个项目中用来保存 Token → 用户ID关系的具体
 - [x] 文件能保存到本地
 - [x] 数据库能记录文件信息
 - [x] 需要 Token 才能上传
-- [x] Postman 测试成功
-- [x] 已提交 Git
+- [x] 完善英文 README
+
+- [x] 创建安全审计 Checklist
+- [x] 创建漏洞记录文档
 
 二、问题
 
@@ -177,3 +179,6 @@ tokenStore：你在这个项目中用来保存 Token → 用户ID关系的具体
 @Mapper
 public interface FileInfoMapper extends BaseMapper<FileInfo> {}中为什么里面没有写SQL？
 因为BaseMapper<FileInfo>已经提供了常用数据库操作
+
+
+

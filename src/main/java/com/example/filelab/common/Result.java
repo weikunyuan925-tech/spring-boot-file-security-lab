@@ -25,6 +25,15 @@ public class Result<T> {
         return new Result<>(200, message, null);
     }
 
+    public static <T> Result<T> success(T data) {
+        return new Result<>(200, "success", data);
+    }
+
+    public static <T> Result<T> failure(
+            int code, String message) {
+        return new Result<>(code, message, null);
+    }
+
     public static <T> Result<T> error(Integer code, String message) {
         return new Result<>(code, message, null);
     }

@@ -1,14 +1,16 @@
 package com.example.filelab.controller;
 
 import com.example.filelab.common.Result;
+import com.example.filelab.dto.FileListItemDTO;
 import com.example.filelab.entity.FileInfo;
 import com.example.filelab.mapper.FileInfoMapper;
+import com.example.filelab.service.FileService;
+import com.example.filelab.service.TokenService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -16,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -24,12 +27,64 @@ import java.util.UUID;
 public class FileController {
 
     private final FileInfoMapper fileInfoMapper;
+    private final FileService fileService;
+    private final TokenService tokenService;
+
+
+    public FileController(
+            FileInfoMapper fileInfoMapper, FileService fileService,
+            TokenService tokenService) {
+        this.fileInfoMapper = fileInfoMapper;
+        this.fileService = fileService;
+        this.tokenService = tokenService;
+    }
 
     @Value("${file.upload-dir:uploads}")
     private String uploadDir;
 
-    public FileController(FileInfoMapper fileInfoMapper) {
-        this.fileInfoMapper = fileInfoMapper;
+
+    @GetMapping("/list")
+    public ResponseEntity<Result<List<FileListItemDTO>>> listFiles(
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false
+            ) String authorization) {
+
+        // 1. 检查 Authorization 请求头
+        if (authorization == null
+                || !authorization.startsWith("Bearer ")) {
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body(Result.<List<FileListItemDTO>>failure(
+                            401, "缺少或无效的Token"));
+        }
+
+        // 2. 提取 Token
+        String token = authorization.substring(7).trim();
+
+        if (token.isEmpty()) {
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body(Result.<List<FileListItemDTO>>failure(
+                            401, "缺少或无效的Token"));
+        }
+
+        // 3. 通过服务器端 Token 存储识别当前用户
+        Long userId = tokenService.getUserId(token);
+
+        if (userId == null) {
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body(Result.<List<FileListItemDTO>>failure(
+                            401, "缺少或无效的Token"));
+        }
+
+        // 4. 只查询当前用户的文件
+        List<FileListItemDTO> files =
+                fileService.listByUserId(userId);
+
+        // 5. 返回结果
+        return ResponseEntity.ok(Result.success(files));
     }
 
     @PostMapping("/upload")
@@ -115,4 +170,5 @@ public class FileController {
             return Result.error(500, "文件保存失败");
         }
     }
+
 }
