@@ -1,7 +1,6 @@
 package com.example.filelab.config;
 
 import com.example.filelab.service.TokenService;
-
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
@@ -75,6 +74,10 @@ public class TokenInterceptor implements HandlerInterceptor {
         // 5. 将认证后的用户 ID 交给 Controller
         request.setAttribute("userId", userId);
 
+        // 6. 保存当前 Token，供注销接口使用
+        request.setAttribute("token", token);
+
         return true;
+
     }
 }

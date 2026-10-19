@@ -181,4 +181,23 @@ public class SysUserController {
 
         return Result.success("获取成功", data);
     }
+
+    @PostMapping("/logout")
+    public Result<Void> logout(HttpServletRequest request) {
+
+        String token = (String) request.getAttribute("token");
+
+        if (token == null) {
+            return Result.error(401, "用户未登录");
+        }
+
+        boolean invalidated = tokenService.invalidateToken(token);
+
+        if (!invalidated) {
+            return Result.error(401, "Token 无效或已失效");
+        }
+
+        return Result.success("退出登录成功");
+    }
+
 }
