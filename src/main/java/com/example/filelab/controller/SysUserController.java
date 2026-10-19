@@ -9,6 +9,7 @@ import com.example.filelab.entity.SysUser;
 import com.example.filelab.mapper.SysUserMapper;
 import com.example.filelab.service.TokenService;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,12 +21,14 @@ public class SysUserController {
 
     private final SysUserMapper sysUserMapper;
     private final TokenService tokenService;
+    private final PasswordEncoder passwordEncoder;
 
     public SysUserController(
             SysUserMapper sysUserMapper,
-            TokenService tokenService) {
+            TokenService tokenService, PasswordEncoder passwordEncoder) {
         this.sysUserMapper = sysUserMapper;
         this.tokenService = tokenService;
+        this.passwordEncoder = passwordEncoder;
     }
 
 
@@ -104,10 +107,11 @@ public class SysUserController {
         SysUser user = new SysUser();
         user.setUsername(username);
 
-        // 先故意明文保存
-        // 后续安全审计阶段改成 BCrypt
-        user.setPassword(request.getPassword());
-
+        // 先故意明文保存   后续安全审计阶段改成 BCrypt   user.setPassword(request.getPassword());
+        // 使用 BCrypt 哈希密码后再保存到数据库
+        user.setPassword(
+                passwordEncoder.encode(request.getPassword())
+        );
         user.setRole("USER");
 
         // 6. 保存到数据库
@@ -135,9 +139,17 @@ public class SysUserController {
                                 request.getUsername().trim())
         );
 
-        // 不区分用户名错误和密码错误，避免泄露账号是否存在
+       /* 不区分用户名错误和密码错误，避免泄露账号是否存在，这是没有用哈希保存的方法
         if (user == null
                 || !user.getPassword().equals(request.getPassword())) {
+            return Result.error(401, "用户名或密码错误");
+        }*/
+
+        if (user == null
+                || !passwordEncoder.matches(
+                request.getPassword(),
+                user.getPassword())) {
+
             return Result.error(401, "用户名或密码错误");
         }
 
