@@ -16,6 +16,6 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(tokenInterceptor)
-                .addPathPatterns("/api/user/me", "/api/file/upload");
+                .addPathPatterns("/api/user/me", "/api/file/**");
     }
 }

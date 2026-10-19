@@ -24,34 +24,55 @@ public class TokenInterceptor implements HandlerInterceptor {
         this.objectMapper = objectMapper;
     }
 
+    private void writeUnauthorizedResponse(
+            HttpServletResponse response,
+            String message) throws IOException {
+
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setCharacterEncoding("UTF-8");
+        response.setContentType("application/json;charset=UTF-8");
+
+        Map<String, Object> result = Map.of(
+                "code", 401,
+                "message", message,
+                "data", Map.of()
+        );
+
+        objectMapper.writeValue(response.getWriter(), result);
+    }
+
     @Override
     public boolean preHandle(
             HttpServletRequest request,
             HttpServletResponse response,
             Object handler) throws IOException {
 
-        String token = request.getHeader("token");
-        Long userId = tokenService.getUserId(token);
+        // 1. 获取 Authorization 请求头
+        String authHeader = request.getHeader("Authorization");
 
-        if (userId == null) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setCharacterEncoding("UTF-8");
-            response.setContentType("application/json");
-
-            response.getWriter().write(
-                    objectMapper.writeValueAsString(
-                            Map.of(
-                                    "code", 401,
-                                    "message", "Token 无效或已失效",
-                                    "data", Map.of()
-                            )
-                    )
-            );
-
+        // 2. 检查请求头是否存在，以及格式是否正确
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            writeUnauthorizedResponse(response, "请提供有效的 Token");
             return false;
         }
 
-        // 将认证后的用户 ID 交给后续 Controller
+        // 3. 提取 Token
+        String token = authHeader.substring(7).trim();
+
+        if (token.isEmpty()) {
+            writeUnauthorizedResponse(response, "Token 不能为空");
+            return false;
+        }
+
+        // 4. 验证 Token，获取用户 ID
+        Long userId = tokenService.getUserId(token);
+
+        if (userId == null) {
+            writeUnauthorizedResponse(response, "Token 无效或已失效");
+            return false;
+        }
+
+        // 5. 将认证后的用户 ID 交给 Controller
         request.setAttribute("userId", userId);
 
         return true;

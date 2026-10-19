@@ -111,3 +111,18 @@ Configuration: Spring configuration support using Java-based @Configuration clas
 Rich Object Mapping: Annotation based mapping metadata
 Repositories: Automatic implementation of Repository interfaces including support for custom query methods.
 Querydsl: Querydsl integration to support type-safe queries.
+
+
+
+Spring Data for MongoDB is part of the umbrella Spring Data providing integration with the MongoDB document database with a wide range of server and driver versions, offering a familiar and consistent Spring based programming model while retaining store specific features and capabilities.
+
+Features
+MongoTemplate: Helper class that increases productivity for common tasks.
+Object Mapping: Feature rich, annotation driven object mapper.
+Lifecycle Events: Before and after save, update, delete hooks and events.
+Data Repositories: Repository interfaces including support for custom queries & aggregations.
+Multi Document Transactions: Managed transaction support for multi document modifications.
+Encryption: Automatic and explicit client side field level encryption.
+GridFS: Large file storage.
+Querydsl: Type-safe query integration.
+Kotlin: Extensions to enrich developer experience.

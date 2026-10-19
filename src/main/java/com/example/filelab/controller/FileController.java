@@ -1,5 +1,6 @@
 package com.example.filelab.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.filelab.common.Result;
 import com.example.filelab.dto.FileListItemDTO;
 import com.example.filelab.entity.FileInfo;
@@ -145,7 +146,7 @@ public class FileController {
     }
 
     @GetMapping("/download/{fileId}")
-    public ResponseEntity<?> downloadFile(@PathVariable Long fileId, @RequestHeader(value = "Authorization", required = false) String authorization) {
+    public ResponseEntity<?> downloadFile(@PathVariable("fileId")  Long fileId, @RequestHeader(value = "Authorization", required = false) String authorization) {
 
         // 1. 检查 Authorization 请求头
         if (authorization == null || !authorization.startsWith("Bearer ")) {
@@ -200,6 +201,61 @@ public class FileController {
 
         } catch (IOException | InvalidPathException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Result.failure(404, "文件不存在"));
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    public Result deleteFile(@PathVariable("id")  Long id, HttpServletRequest request) {
+
+        // 1. 从拦截器中获取当前登录用户 ID
+        Long userId = (Long) request.getAttribute("userId");
+
+        if (userId == null) {
+            return Result.failure(401,"用户未登录");
+        }
+
+        // 2. 查询文件，并同时校验文件所有权
+        LambdaQueryWrapper<FileInfo> wrapper = new LambdaQueryWrapper<>();
+
+        wrapper.eq(FileInfo::getId, id).eq(FileInfo::getUserId, userId);
+
+        FileInfo fileInfo = fileInfoMapper.selectOne(wrapper);
+
+        // 文件不存在或不属于当前用户，统一返回
+        if (fileInfo == null) {
+            return Result.failure(404, "文件不存在");
+        }
+
+        try {
+            // 3. 校验文件路径，确保文件位于上传目录中
+            Path uploadRoot = Paths.get(uploadDir).toAbsolutePath().normalize();
+
+            Path filePath = Paths.get(fileInfo.getFilePath()).toAbsolutePath().normalize();
+
+            if (filePath.equals(uploadRoot) || !filePath.startsWith(uploadRoot)) {
+                return Result.failure(400,"非法文件路径");
+            }
+
+            // 4. 删除磁盘文件
+            Files.deleteIfExists(filePath);
+
+            LambdaQueryWrapper<FileInfo> deleteWrapper =
+                    new LambdaQueryWrapper<>();
+
+            deleteWrapper.eq(FileInfo::getId, id)
+                    .eq(FileInfo::getUserId, userId);
+
+            // 5. 删除数据库记录
+            int rows = fileInfoMapper.deleteById(deleteWrapper);
+
+            if (rows != 1) {
+                return Result.failure(500,"数据库记录删除失败");
+            }
+
+            return Result.success("文件删除成功");
+
+        } catch (IOException e) {
+            return Result.failure(500,"文件删除失败");
         }
     }
 

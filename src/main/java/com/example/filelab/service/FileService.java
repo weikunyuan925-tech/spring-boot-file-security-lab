@@ -40,4 +40,14 @@ public class FileService {
         return fileInfoMapper.selectOne(query);
     }
 
+    public FileInfo delete(Long fileId, Long userId) {
+
+        LambdaQueryWrapper<FileInfo> query = new LambdaQueryWrapper<>();
+        //SQL 查询会同时限制文件 ID 和当前用户 ID。
+        query.eq(FileInfo::getId, fileId).eq(FileInfo::getUserId, userId);
+
+        fileInfoMapper.delete(query);
+        return fileInfoMapper.selectOne(query);
+    }
+
 }
