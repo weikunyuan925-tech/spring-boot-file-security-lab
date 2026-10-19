@@ -30,8 +30,42 @@ public class SysUserController {
 
 
     @GetMapping("/list")
-    public List<SysUser> list() {
-        return sysUserMapper.selectList(null);
+    public Result<List<CurrentUserResponse>> list(
+            HttpServletRequest request) {
+
+        // 1. 获取拦截器认证后的用户 ID
+        Long currentUserId =
+                (Long) request.getAttribute("userId");
+
+        if (currentUserId == null) {
+            return Result.error(401, "用户未登录");
+        }
+
+        // 2. 查询当前登录用户
+        SysUser currentUser =
+                sysUserMapper.selectById(currentUserId);
+
+        if (currentUser == null) {
+            return Result.error(401, "用户不存在或已失效");
+        }
+
+        // 3. 检查管理员权限
+        if (!"ADMIN".equals(currentUser.getRole())) {
+            return Result.error(403, "无权查看用户列表");
+        }
+
+        // 4. 仅返回安全 DTO，不直接返回 SysUser 实体
+        List<CurrentUserResponse> users =
+                sysUserMapper.selectList(null)
+                        .stream()
+                        .map(user -> new CurrentUserResponse(
+                                user.getId(),
+                                user.getUsername(),
+                                user.getRole()
+                        ))
+                        .toList();
+
+        return Result.success("获取成功", users);
     }
 
     @PostMapping("/register")

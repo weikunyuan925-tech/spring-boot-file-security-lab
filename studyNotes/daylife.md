@@ -1,4 +1,4 @@
-****【Day 1 打卡】
+【Day 1 打卡】
 
 日期：2026/10/9
 
@@ -225,3 +225,59 @@ Bearer   ---->  认证方案，表示后面跟着一个持有者 Token
 权限控制： 查询时同时匹配 fileId 和 userId，避免越权下载。
 
 文件路径限制： 只允许读取配置上传目录中的真实文件。
+
+
+
+2026/10/19
+
+一、今日完成
+
+- [x] 编写文件删除接口 **DELETE /api/file/{id}**
+
+
+- [x] 实现当前用户身份校验
+
+
+- [x] 实现文件所有权检查
+
+
+- [x] 实现磁盘文件删除
+
+
+- [x] 实现数据库文件记录删除
+
+
+- [x] 检查文件路径，防止路径遍历
+
+
+- [x] 确认删除接口受到 Token 拦截器保护
+- [x] 检查越权情况
+
+二 、问题
+
+1.现在先删除磁盘文件、再删除数据库记录的顺序可能导致两者不一致：例如磁盘文件已删除，但数据库操作失败。
+
+**对于当前学习项目，先记录这一风险，后续再学习事务补偿或文件清理机制**。
+
+2.上传接口、下载接口和删除接口应使用相同的文件定位规则。否则可能出现上传成功，但下载或删除时找不到文件的情况。
+
+3.
+GET /api/file/list	                          ----> 验证 Token，再调用 listByUserId(userId)	 
+POST /api/file/upload	                ----> 从拦截器获取 userId，保存文件归属	 
+GET /api/file/download/{fileId}	----> 验证 Token，再调用 getOwnedFile(fileId, userId)	 
+DELETE /api/file/{id}	                  ----> 查询时同时限制文件 ID 和用户 ID	 
+GET /api/user/me	                      ----> 通过请求属性获取用户 ID	 
+GET /api/user/list	                      ----> 直接查询并返回所有 SysUser	 
+POST /api/user/register	           ----> 公开注册接口	 
+POST /api/user/login	                ----> 验证用户名和密码后签发 Token	  
+
+4.fileservice的权限
+
+listByUserId(userId)
+    └── 只查询当前用户的文件
+
+getOwnedFile(fileId, userId)
+    └── 只查询当前用户拥有的指定文件
+
+deleteOwnedFile(fileId, userId)
+    └── 只删除当前用户拥有的指定文件记录

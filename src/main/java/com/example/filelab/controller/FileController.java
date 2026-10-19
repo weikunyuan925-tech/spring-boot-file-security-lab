@@ -246,7 +246,7 @@ public class FileController {
                     .eq(FileInfo::getUserId, userId);
 
             // 5. 删除数据库记录
-            int rows = fileInfoMapper.deleteById(deleteWrapper);
+            int rows = fileService.deleteOwnedFile(id, userId);
 
             if (rows != 1) {
                 return Result.failure(500,"数据库记录删除失败");
