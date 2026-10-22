@@ -294,3 +294,20 @@ deleteOwnedFile(fileId, userId)
 7.当前 Token 数据存在 `ConcurrentHashMap` 中，只适合单实例学习项目。如果未来部署多台应用服务器，每台服务器会拥有不同的 Token 表；届时需要使用 Redis 等共享存储，并利用过期时间和删除操作实现跨实例的统一失效。
 
 8.账户表：QQ/1111;tom/123456
+
+
+
+2026/10/21
+
+一、今日完成
+
+- [x] 完成security-test.md
+
+
+
+上传限制，1.在application.yml 的 Multipart 限制
+
+​                   2.在FileController代码层做校验
+
+
+

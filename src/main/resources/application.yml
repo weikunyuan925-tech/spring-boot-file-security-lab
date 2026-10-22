@@ -24,3 +24,11 @@ file:
 app:
   auth:
     token-ttl-ms: 7200000
+
+    servlet:
+      multipart:
+        max-file-size: 10MB
+        max-request-size: 11MB
+server:
+  tomcat:
+    max-part-header-size: 2KB
