@@ -73,4 +73,4 @@
 - [ ] 完成回归验证。
 - [ ] 提交修复代码及审计报告。
 
-![](D:\spring-boot-file-security-lab\picture\联想截图_20250920203933.jpg)
+![](D:\spring-boot-file-security-lab\picture\8.jpg)
