@@ -311,3 +311,10 @@ deleteOwnedFile(fileId, userId)
 
 
 
+2026/10/24
+
+一、今日完成
+
+- [x] 完成上传测试，fileuploadcheck.md
+
+- [x] 完成路径穿越测试，pathtraversalcheck.md
