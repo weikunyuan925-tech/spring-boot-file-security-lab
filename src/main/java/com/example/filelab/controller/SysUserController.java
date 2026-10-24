@@ -7,6 +7,7 @@ import com.example.filelab.dto.UserLoginRequest;
 import com.example.filelab.dto.UserRegisterRequest;
 import com.example.filelab.entity.SysUser;
 import com.example.filelab.mapper.SysUserMapper;
+import com.example.filelab.service.LoginAttemptService;
 import com.example.filelab.service.TokenService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -22,13 +23,15 @@ public class SysUserController {
     private final SysUserMapper sysUserMapper;
     private final TokenService tokenService;
     private final PasswordEncoder passwordEncoder;
+    private final LoginAttemptService loginAttemptService;
 
     public SysUserController(
             SysUserMapper sysUserMapper,
-            TokenService tokenService, PasswordEncoder passwordEncoder) {
+            TokenService tokenService, PasswordEncoder passwordEncoder, LoginAttemptService loginAttemptService) {
         this.sysUserMapper = sysUserMapper;
         this.tokenService = tokenService;
         this.passwordEncoder = passwordEncoder;
+        this.loginAttemptService = loginAttemptService;
     }
 
 
@@ -121,7 +124,7 @@ public class SysUserController {
         return Result.success("注册成功");
     }
 
-    @PostMapping("/login")
+    /*@PostMapping("/login")
     public Result<Map<String, String>> login(
             @RequestBody UserLoginRequest request) {
 
@@ -139,11 +142,11 @@ public class SysUserController {
                                 request.getUsername().trim())
         );
 
-       /* 不区分用户名错误和密码错误，避免泄露账号是否存在，这是没有用哈希保存的方法
+       *//* 不区分用户名错误和密码错误，避免泄露账号是否存在，这是没有用哈希保存的方法
         if (user == null
                 || !user.getPassword().equals(request.getPassword())) {
             return Result.error(401, "用户名或密码错误");
-        }*/
+        }*//*
 
         if (user == null
                 || !passwordEncoder.matches(
@@ -159,7 +162,72 @@ public class SysUserController {
                 "登录成功",
                 Map.of("token", token)
         );
+    }*/
+
+    @PostMapping("/login")
+    public Result<Map<String, String>> login(
+            @RequestBody UserLoginRequest request,
+            HttpServletRequest httpRequest) {
+
+        if (request == null
+                || request.getUsername() == null
+                || request.getUsername().isBlank()
+                || request.getPassword() == null
+                || request.getPassword().isBlank()) {
+            return Result.error(400, "用户名和密码不能为空");
+        }
+
+        String username = request.getUsername().trim();
+
+        // 直接连接应用时使用远端地址。
+        // 不要直接信任客户端传入的 X-Forwarded-For。
+        String ip = httpRequest.getRemoteAddr();
+
+       /*//测试请求头ip能否被伪造
+        System.out.println("RemoteAddr = " + httpRequest.getRemoteAddr());
+        System.out.println("X-Forwarded-For = "
+                + httpRequest.getHeader("X-Forwarded-For"));*/
+
+        // 1. 验证前先检查是否处于限制期
+        if (loginAttemptService.isBlocked(username, ip)) {
+            return Result.error(429, "登录尝试过于频繁，请稍后再试");
+        }
+
+        // 2. 查询用户
+        SysUser user = sysUserMapper.selectOne(
+                Wrappers.<SysUser>lambdaQuery()
+                        .eq(SysUser::getUsername, username)
+        );
+
+        // 3. 统一验证用户名与密码
+        if (user == null
+                || !passwordEncoder.matches(
+                request.getPassword(),
+                user.getPassword())) {
+
+            // 4. 记录失败次数
+            boolean blocked =
+                    loginAttemptService.recordFailure(username, ip);
+
+            if (blocked) {
+                return Result.error(429, "登录尝试过于频繁，请稍后再试");
+            }
+
+            return Result.error(401, "用户名或密码错误");
+        }
+
+        // 5. 登录成功，清除失败记录
+        loginAttemptService.recordSuccess(username, ip);
+
+        // 6. 创建 Token
+        String token = tokenService.createToken(user.getId());
+
+        return Result.success(
+                "登录成功",
+                Map.of("token", token)
+        );
     }
+
 
     @GetMapping("/me")
     public Result<CurrentUserResponse> me(

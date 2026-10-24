@@ -318,3 +318,21 @@ deleteOwnedFile(fileId, userId)
 - [x] 完成上传测试，fileuploadcheck.md
 
 - [x] 完成路径穿越测试，pathtraversalcheck.md
+
+
+
+2026/10/25
+
+一、今日完成
+
+- [x] 完成登录限制的设计，增加LoginAttemptService，用时间戳记录
+
+- [x] 测试验证连续失败达到阈值后被限制，返回"code": 429, "message": "登录尝试过于频繁，请稍后再试"
+
+- [x] 验证限制期间正确密码仍被拒绝，返回"code": 429, "message": "登录尝试过于频繁，请稍后再试"
+
+- [x] 验证限制期结束后恢复登录，返回"code": 200
+
+- [x] 验证正常登录与 Token 功能没有回归问题，测试其他接口使用正常
+
+  
