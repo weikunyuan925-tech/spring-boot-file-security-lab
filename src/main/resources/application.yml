@@ -4,8 +4,8 @@ spring:
 
   datasource:
     url: jdbc:mysql://localhost:3306/file_security_lab?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
-    username: root
-    password: 123456
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   servlet:
@@ -18,8 +18,13 @@ mybatis-plus:
     map-underscore-to-camel-case: true
 
 file:
-  upload-dir: uploads
-#  uploads 表示项目运行时的当前工作目录下的uploads文件夹。上传的实际文件会保存在本地磁盘，而不是存进MySQL。
+  upload-dir: ${FILE_UPLOAD_DIR:${user:home}/filelab-uploads}
+  #优先读取环境变量 FILE_UPLOAD_DIR。
+  #如果没有设置，就使用用户主目录下的 filelab-uploads 目录。
+  #Windows 下通常会解析到类似 C:\Users\你的用户名\filelab-uploads 的位置。
+  #Linux 下通常会解析到类似 /home/应用用户/filelab-uploads 的位置。
+  #upload-dir: uploads
+  #uploads 表示项目运行时的当前工作目录下的uploads文件夹。上传的实际文件会保存在本地磁盘，而不是存进MySQL。
 
 app:
   auth:
@@ -32,3 +37,8 @@ app:
 server:
   tomcat:
     max-part-header-size: 2KB
+
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never

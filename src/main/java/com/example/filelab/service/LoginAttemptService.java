@@ -12,7 +12,7 @@ public class LoginAttemptService {
     private static final int MAX_ATTEMPTS = 5;
 
     // 限制时长：15 分钟
-    private static final long LOCK_TIME_MILLIS = 1 * 60 * 1000L;
+    private static final long LOCK_TIME_MILLIS = 15 * 60 * 1000L;
 
     private final ConcurrentHashMap<String, AttemptRecord> attempts =
             new ConcurrentHashMap<>();

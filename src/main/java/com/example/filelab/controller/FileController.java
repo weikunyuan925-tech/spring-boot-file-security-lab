@@ -2,6 +2,7 @@ package com.example.filelab.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.filelab.common.Result;
+import com.example.filelab.config.FileStorageConfig;
 import com.example.filelab.dto.FileListItemDTO;
 import com.example.filelab.entity.FileInfo;
 import com.example.filelab.mapper.FileInfoMapper;
@@ -32,16 +33,19 @@ public class FileController {
     private final FileInfoMapper fileInfoMapper;
     private final FileService fileService;
     private final TokenService tokenService;
-    @Value("${file.upload-dir:uploads}")
-    private String uploadDir;
+    private final FileStorageConfig fileStorageConfig;
+    //@Value("${file.upload-dir:uploads}")
+   // @Value("${file.upload-dir}")
+
     private static final long MAX_FILE_SIZE =
             10L * 1024 * 1024;
     private static final Set<String> ALLOWED_EXTENSIONS =
             Set.of(".pdf", ".png", ".jpg", ".jpeg");
-    public FileController(FileInfoMapper fileInfoMapper, FileService fileService, TokenService tokenService) {
+    public FileController(FileInfoMapper fileInfoMapper, FileService fileService, TokenService tokenService, FileStorageConfig fileStorageConfig) {
         this.fileInfoMapper = fileInfoMapper;
         this.fileService = fileService;
         this.tokenService = tokenService;
+        this.fileStorageConfig = fileStorageConfig;
     }
     //基础签名验证
     private String detectMimeType(MultipartFile file)
@@ -195,7 +199,7 @@ public class FileController {
 
         try {
             // 创建上传目录
-            Path directory = Paths.get(uploadDir).toAbsolutePath().normalize();
+            Path directory = fileStorageConfig.getUploadRoot();
 
             Files.createDirectories(directory);
 
@@ -325,7 +329,7 @@ public class FileController {
 
         // 5. 验证文件物理路径并读取文件
         try {
-            Path rootPath = Paths.get(uploadDir).toRealPath();
+            Path rootPath = fileStorageConfig.getUploadRoot();
 
             Path realFilePath = Paths.get(fileInfo.getFilePath()).toRealPath();
 
@@ -377,7 +381,7 @@ public class FileController {
 
         try {
             // 3. 校验文件路径，确保文件位于上传目录中
-            Path uploadRoot = Paths.get(uploadDir).toAbsolutePath().normalize();
+            Path uploadRoot = fileStorageConfig.getUploadRoot();
 
             Path filePath = Paths.get(fileInfo.getFilePath()).toAbsolutePath().normalize();
 
