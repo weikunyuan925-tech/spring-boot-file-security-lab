@@ -2,6 +2,7 @@ package com.example.filelab.common;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -57,5 +58,22 @@ public class GlobalExceptionHandler {
         }
 
         return false;
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Result> handleValidationException(
+            MethodArgumentNotValidException e) {
+
+        String message = e.getBindingResult()
+                .getFieldErrors()
+                .stream()
+                .map(error -> error.getDefaultMessage())
+                .filter(msg -> msg != null && !msg.isBlank())
+                .findFirst()
+                .orElse("请求参数校验失败");
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Result.error(400, message));
     }
 }

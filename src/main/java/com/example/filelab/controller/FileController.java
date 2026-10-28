@@ -1,6 +1,7 @@
 package com.example.filelab.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.example.filelab.common.FileUploadException;
 import com.example.filelab.common.Result;
 import com.example.filelab.config.FileStorageConfig;
 import com.example.filelab.dto.FileListItemDTO;
@@ -9,7 +10,7 @@ import com.example.filelab.mapper.FileInfoMapper;
 import com.example.filelab.service.FileService;
 import com.example.filelab.service.TokenService;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.beans.factory.annotation.Value;
+
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
@@ -22,7 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.LocalDateTime;
+
 import java.util.*;
 
 
@@ -195,13 +196,13 @@ public class FileController {
             return Result.error(401, "未登录或 Token 无效");
         }
 
-        Path savedPath = null;
+        //Path savedPath = null;
 
         try {
             // 创建上传目录
-            Path directory = fileStorageConfig.getUploadRoot();
+            //Path directory = fileStorageConfig.getUploadRoot();
 
-            Files.createDirectories(directory);
+            //Files.createDirectories(directory);
 
             // 使用随机文件名，避免用户通过原始文件名控制保存路径，只处理了空文件名，没有对文件名长度、路径信息、控制字符等进行校验。
            /* String originalName = file.getOriginalFilename();
@@ -250,8 +251,7 @@ public class FileController {
             }
 
             // 无法识别文件类型，或者扩展名与实际类型不匹配时，拒绝上传
-            if (detectedMime == null
-                    || !extensionMatchesMime(extension, detectedMime)) {
+            if (!extensionMatchesMime(extension, detectedMime)) {
 
                 return Result.error(
                         400,
@@ -259,7 +259,7 @@ public class FileController {
                 );
             }
 
-            String storedName = UUID.randomUUID() + extension;
+            /*String storedName = UUID.randomUUID() + extension;
             savedPath = directory.resolve(storedName).normalize();
 
             // 先保存实际文件到磁盘
@@ -276,16 +276,38 @@ public class FileController {
             info.setContentType(detectedMime);
             info.setCreateTime(LocalDateTime.now());
 
-            int rows = fileInfoMapper.insert(info);
+            // 仅用于本地复现 模拟数据库保存失败
+            throw new RuntimeException("A02-TEST-DB-INSERT-FAILED");*/
 
-            if (rows != 1) {
+           //int rows = fileInfoMapper.insert(info);
+
+           /* if (rows != 1) {
                 Files.deleteIfExists(savedPath);
                 return Result.error(500, "文件信息保存失败");
             }
 
             return Result.success("上传成功", Map.of("id", info.getId(), "originalName", info.getOriginalName(), "storedName", info.getStoredName(), "fileSize", info.getFileSize()));
+*/
 
-        } catch (IOException e) {
+            FileInfo info = fileService.storeUploadedFile(
+                    file,
+                    userId,
+                    originalName,
+                    extension,
+                    detectedMime
+            );
+
+            return Result.success(
+                    "上传成功",
+                    Map.of(
+                            "id", info.getId(),
+                            "originalName", info.getOriginalName(),
+                            "storedName", info.getStoredName(),
+                            "fileSize", info.getFileSize()
+                    )
+            );
+
+        /*} catch (IOException e) {
             // 如果保存过程中发生 IO 错误，尝试清理已创建的文件
             if (savedPath != null) {
                 try {
@@ -295,7 +317,17 @@ public class FileController {
                 }
             }
             return Result.error(500, "文件保存失败");
+        }*/
+
+        } catch (FileUploadException e) {
+            // 对客户端返回通用错误，不暴露数据库异常或本地路径
+            return Result.error(500, "文件保存失败");
+
+        } catch (IOException e) {
+            // 例如读取上传文件签名时发生 IO 异常
+            return Result.error(500, "文件处理失败");
         }
+
     }
 
     @GetMapping("/download/{fileId}")

@@ -10,9 +10,11 @@ import com.example.filelab.mapper.SysUserMapper;
 import com.example.filelab.service.LoginAttemptService;
 import com.example.filelab.service.TokenService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -75,23 +77,44 @@ public class SysUserController {
     }
 
     @PostMapping("/register")
-    public Result<Void> register(@RequestBody UserRegisterRequest request) {
+    public Result<Void> register(@Valid @RequestBody UserRegisterRequest request) {
 
         // 1. 校验请求体
         if (request == null) {
             return Result.error(400, "请求参数不能为空");
         }
 
-        // 2. 校验用户名
-        if (request.getUsername() == null
+        // 2. 校验用户名 已通过@Valid包含
+        /*if (request.getUsername() == null
                 || request.getUsername().trim().isBlank()) {
             return Result.error(400, "用户名不能为空");
+        }*/
+
+        int usernameBytes = request.getUsername()
+                .getBytes(StandardCharsets.UTF_8)
+                .length;
+
+        if (usernameBytes > 64) {
+            return Result.error(400, "用户名 UTF-8 字节长度不能超过64");
         }
 
+
         // 3. 校验密码
-        if (request.getPassword() == null
+        /*if (request.getPassword() == null
                 || request.getPassword().isBlank()) {
             return Result.error(400, "密码不能为空");
+        }*/
+
+        int passwordBytes = request.getPassword()
+                .getBytes(StandardCharsets.UTF_8)
+                .length;
+
+        if (passwordBytes < 12) {
+            return Result.error(400, "密码 UTF-8 字节长度不能少于12");
+        }
+
+        if (passwordBytes > 72) {
+            return Result.error(400, "密码 UTF-8 字节长度不能超过72");
         }
 
         String username = request.getUsername().trim();

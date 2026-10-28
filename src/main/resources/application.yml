@@ -18,7 +18,7 @@ mybatis-plus:
     map-underscore-to-camel-case: true
 
 file:
-  upload-dir: ${FILE_UPLOAD_DIR:${user:home}/filelab-uploads}
+  upload-dir: ${FILE_UPLOAD_DIR:${user.home}/filelab-uploads}
   #优先读取环境变量 FILE_UPLOAD_DIR。
   #如果没有设置，就使用用户主目录下的 filelab-uploads 目录。
   #Windows 下通常会解析到类似 C:\Users\你的用户名\filelab-uploads 的位置。
