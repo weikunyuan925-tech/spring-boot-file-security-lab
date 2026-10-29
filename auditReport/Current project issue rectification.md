@@ -76,24 +76,45 @@
 
 ### A03：通用异常处理尚未覆盖
 
-文件：[GlobalExceptionHandler.java](https://github.com/weikunyuan925-tech/spring-boot-file-security-lab/blob/main/src/main/java/com/example/filelab/common/GlobalExceptionHandler.java?utm_source=chatgpt.com)
+- 代码文件和方法：GlobalExceptionHandler.java
 
-当前处理器覆盖了文件上传大小超限和部分 Multipart 异常，但没有通用的 `Exception` 兜底处理方法。
+- 复现条件：打开一个不存在的地址/api/123，返回，notfound，没有进行统一管理；打开一个测试地址/api/audit-test/exception，返回 "status": 500, "error": "Internal Server Error" , "path": "/api/audit-test/exception"没有进行统一管理
 
-这不等于已经证明存在信息泄露：你的 `application.yml` 已设置 `include-stacktrace`、`include-message` 和 `include-binding-errors` 为 `never`，这有助于限制 Spring Boot 默认错误响应中的信息。
+- 可能影响：暴露不该暴露的系统信息，不便于管理异常情况。
 
-但建议增加统一的异常处理策略，确保未预期的服务器异常返回通用错误信息，同时在服务端记录足够的诊断日志。
+- 修复建议：在GlobalExceptionHandler.java增加
 
-需要注意：
+  ```java
+  @ExceptionHandler(NoResourceFoundException.class)
+  public ResponseEntity<Result> handleNoResourceFound(
+          NoResourceFoundException e) {
+  return ResponseEntity
+          .status(HttpStatus.NOT_FOUND)
+          .body(Result.error(404, "请求的资源不存在"));
+  }       
+  @ExceptionHandler(Exception.class) //兜底异常返回
+  public ResponseEntity<Result> handleGeneralException(Exception e) {
+      log.error("发生未处理的服务端异常", e);
+  
+      return ResponseEntity
+              .status(HttpStatus.INTERNAL_SERVER_ERROR)
+              .body(Result.error(500, "服务器内部错误，请稍后重试"));
+  }
+  ```
 
-- 不要将 `exception.getMessage()` 或堆栈直接返回客户端。
-- 对已知异常进行精确处理。
-- 通用兜底处理器只处理真正未预期的异常，避免掩盖业务异常。
-- 保持实际 HTTP 状态码与响应体中的业务码一致。
+- 复测方法：
 
-你之前的 E02 测试应继续保留，并检查 Response Body，而不是只看 HTTP 500。
+  | 测试请求                                                     | 结果                                   |
+  | ------------------------------------------------------------ | -------------------------------------- |
+  | 一个实际不存在的接口  GET /api/this-route-does-not-exist     | HTTP 404，"请求的资源不存在"           |
+  | 一个实际存在、但会触发未处理异常的接口（/api/audit-test/exception） | HTTP 500，"服务器内部错误，请稍后重试" |
+  | post http://localhost:8080/api/file/upload，文件超过大小     | HTTP 413 ，"文件大小超过限制"          |
 
-### A05：Token 和登录限流是单机内存方案
+- 状态：专用异常仍返回预期状态码；未处理异常返回 HTTP 500；响应中不包含 SQL、服务器路径、异常堆栈等内部细节。
+
+
+
+### A04：Token 和登录限流是单机内存方案
 
 文件：
 
