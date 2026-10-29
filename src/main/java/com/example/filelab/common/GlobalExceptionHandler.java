@@ -1,5 +1,7 @@
 package com.example.filelab.common;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -7,6 +9,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -75,5 +78,30 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(Result.error(400, message));
+    }
+
+    // 一个不存在的地址返回
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Result> handleNoResourceFound(
+            NoResourceFoundException e) {
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(Result.error(404, "请求的资源不存在"));
+    }
+
+   // 兜底的异常反馈
+    private static final Logger log =
+            LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Result> handleGeneralException(Exception e) {
+        // 服务端记录完整异常，供排查问题使用
+        log.error("发生未处理的服务端异常", e);
+
+        // 客户端只收到通用错误信息，不暴露内部细节
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Result.error(500, "服务器内部错误，请稍后重试"));
     }
 }
