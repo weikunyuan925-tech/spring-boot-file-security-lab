@@ -11,6 +11,7 @@ import com.example.filelab.service.LoginAttemptService;
 import com.example.filelab.service.TokenService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
@@ -141,7 +142,12 @@ public class SysUserController {
         user.setRole("USER");
 
         // 6. 保存到数据库
-        sysUserMapper.insert(user);
+        try {
+            sysUserMapper.insert(user);
+        } catch (DuplicateKeyException e) {
+            // 并发注册时，另一个请求可能已经插入相同用户名
+            return Result.error(409, "用户名已存在");
+        }
 
         // 7. 返回结果
         return Result.success("注册成功");

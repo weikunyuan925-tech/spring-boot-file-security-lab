@@ -238,7 +238,7 @@
   | DEL-05 | 模拟数据库删除失败，<br />步骤：1.开发环境临时修改 FileService.deleteOwnedFile()，让它返回 0；<br />2.调用删除接口。 | 返回500，数据库删除失败，文件恢复成功，原始路径：C:\Users\***\filelab-uploads\*.pdf |
   | DEL-06 | 修改数据库文件路径，使其指向上传目录外                       | 返回400，拒绝删除非法路径文件，fileId=51, userId=**, path=C:\Users\8888\Desktop\素材库\图片1.png |
   | DEL-07 | 模拟隔离文件清理失败<br />步骤：1.在删除临时文件中Files.deleteIfExists(quarantinePath)后直接抛出异常来主动模拟隔离文件清理失败，throw new IOException("DEL-07-TEST-CLEANUP-FAILED");  <br />2.后调用删除接口。 | 数据库记录已删除，但隔离文件清理失败，fileId=51, quarantinePath=C:\Users\2222\filelab-quarantine\666.tmp |
-  | DEL-08 | 两个请求同时删除同一个文件<br />步骤：使用Apache JMeter测试并发，第一步：创建测试计划，打开 JMeter 后：「测试计划」「线程组」，在右侧设置：线程数（用户数）2，Ramp-Up 时间（秒）1，循环次数1<br />第二步：添加同步定时器，为了尽量让两个请求同时发出：「线程组」「添加」→「定时器」→「同步定时器」，模拟用户组的数量2，超时时间（毫秒）5000<br />第三步：添加 HTTP 请求，「线程组」「添加」→「取样器」→「HTTP 请求」，名称：DEL-08-并发删除，协议：http，服务器名称或 IP：localhost，端口号：8080，方法：DELETE，路径：/api/file/文件ID<br />配置 Authorization 请求头，「线程组」「添加」→「配置元件」→「HTTP 信息头管理器」。添加一行：Authorization `Bearer 有效Token`<br />添加结果查看器，「线程组」，选择「添加」→「监听器」→「察看结果树」。再添加一个「汇总报告」，方便查看两个请求的结果。<br />执行测试，点击 JMeter 上方绿色三角形「启动」。 | 两个请求同时删除同一个文件，只有一个请求返回成功；另一个请求返回明确的失败结果；最终数据库记录和原始文件均不存在 |
+  | DEL-08 | 两个请求同时删除同一个文件<br />步骤：使用Apache JMeter测试并发，第一步：创建测试计划，打开 JMeter 后：「测试计划」「线程组」，在右侧设置：线程数（用户数）2，Ramp-Up 时间（秒）1，循环次数1<br />第二步：添加同步定时器，为了尽量让两个请求同时发出：「线程组」「添加」→「定时器」→「同步定时器」，模拟用户组的数量2，超时时间（毫秒）5000<br />第三步：添加 HTTP 请求，「线程组」「添加」→「取样器」→「HTTP 请求」，名称：DEL-08-并发删除，协议：http，服务器名称或 IP：localhost，端口号：8080，方法：DELETE，路径：/api/file/文件ID<br />第四步：配置 Authorization 请求头，「线程组」「添加」→「配置元件」→「HTTP 信息头管理器」。添加一行：Authorization `Bearer 有效Token`<br />第五步：添加结果查看器，「线程组」，选择「添加」→「监听器」→「察看结果树」。再添加一个「汇总报告」，方便查看两个请求的结果。<br />第六步：执行测试，点击 JMeter 上方绿色三角形「启动」。 | 两个请求同时删除同一个文件，只有一个请求返回成功；另一个请求返回明确的失败结果；最终数据库记录和原始文件均不存在 |
 
 - 状态：文件删除操作增加隔离目录和失败补偿机制。删除数据库记录前先将文件移动到隔离目录；数据库删除失败时尝试恢复原文件；数据库删除成功后清理隔离文件。同时增加路径校验、普通文件检查及并发删除测试。
 
@@ -247,47 +247,69 @@
 
 ### A06：注册接口存在并发竞态
 
-当前流程是：
+- 代码文件和方法：SysUserController.java
 
-```
+- 复现条件：同时并发注册时，同一信息，成功的返回200，未成功注册返回500，未处理的服务器错误。
+
+- 可能影响：重复用户数据，或并发请求触发未处理数据库异常。
+
+- 修复建议：
+
+  1.数据库唯一索引： 最终防线，保证并发情况下也不能出现重复用户名。
+
+  2.应用层捕获重复键异常： 将并发导致的插入失败转换成明确的重复用户名响应，而不是 500。
+
+```java
+在这个查询之后进行捕获异常DuplicateKeyException，转换成稳定的HTTP=409业务响应，避免并发情况下直接返回未处理的服务器错误。
 SysUser existingUser = sysUserMapper.selectOne(
     Wrappers.<SysUser>lambdaQuery()
         .eq(SysUser::getUsername, username)
 );
-
 if (existingUser != null) {
     return Result.error(409, "用户名已存在");
 }
-
-sysUserMapper.insert(user);
+// 保存到数据库
+try {
+    sysUserMapper.insert(user);
+} catch (DuplicateKeyException e) {
+    // 并发注册时，另一个请求可能已经插入相同用户名
+    return Result.error(409, "用户名已存在");
+}
+// 返回结果
+return Result.success("注册成功");
 ```
 
-如果两个并发请求使用同一个用户名，可能同时通过前面的存在性检查，然后同时尝试插入。
+- 复测方法：JMeter 两个并发请求注册同一用户名
 
-因此，数据库必须有 `username` 的唯一约束；Java 层的查询只能用于改善正常情况下的提示，不能替代数据库约束。
+步骤：
 
-建议捕获并识别重复键异常，将其转换成稳定的 HTTP `409 Conflict` 或项目约定的业务响应，避免并发情况下直接返回未处理的服务器错误。
+第一步：创建测试计划，打开 JMeter 后：「测试计划」「线程组」，在右侧设置：线程数（用户数）2，Ramp-Up 时间（秒）1，循环次数1
 
+第二步：添加同步定时器，为了尽量让两个请求同时发出：「线程组」「添加」→「定时器」→「同步定时器」，模拟用户组的数量2，超时时间（毫秒）5000
 
+第三步：添加 HTTP 请求，「线程组」「添加」→「取样器」→「HTTP 请求」，名称：请求注册同一用户名，协议：http，服务器名称或 IP：localhost，端口号：8080，方法：POST，路径：/api/user/register，请求体：
 
+```
+{
+  "username": "race_test_001",
+  "password": "TestPassword123"
+}
+```
 
+第四步：配置 Content-Type，不然无法识别json，「线程组」「添加」→「配置元件」→「HTTP 信息头管理器」。添加一行：Content-Type `application/json`
 
-代码文件和方法。
+第五步：添加结果查看器，「线程组」，选择「添加」→「监听器」→「察看结果树」。再添加一个「汇总报告」，方便查看两个请求的结果。
 
-复现条件。
+第六步：执行测试，点击 JMeter 上方绿色三角形「启动」。
 
-可能影响。
+结果：
 
-修复建议。
+| 检查项     | 结果                     |
+| ---------- | ------------------------ |
+| 请求 A     | 注册成功                 |
+| 请求 B     | 用户名已存在，业务码 409 |
+| 数据库记录 | 只有一条 `race_test_001` |
+| 数据库密码 | BCrypt 哈希值，不是明文  |
+| 应用日志   | 不出现未处理的重复键异常 |
 
-复测方法。
-
-状态：已确认、待整改、待复测或设计限制。
-
-
-
-层级	已检查的内容	结论
-Controller	SysUserController、FileController	已发现输入校验、异常补偿和并发处理方面的改进点
-Service	FileService、TokenService、LoginAttemptService	文件所有权查询和 Token 过期逻辑已有基础；内存存储有单机限制
-Mapper	SysUserMapper、FileInfoMapper	使用 MyBatis-Plus BaseMapper，当前已查看代码未发现手写 SQL 拼接
-配置与拦截器	FileStorageConfig、TokenInterceptor、WebConfig	Token 校验和请求拦截已有实现；上传目录配置需要修正
+- 状态：通过。
