@@ -12,12 +12,16 @@ import com.example.filelab.service.TokenService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+
+import static com.example.filelab.common.Result.error;
 
 @RestController
 @RequestMapping("/api/user")
@@ -47,7 +51,7 @@ public class SysUserController {
                 (Long) request.getAttribute("userId");
 
         if (currentUserId == null) {
-            return Result.error(401, "用户未登录");
+            return error(401, "用户未登录");
         }
 
         // 2. 查询当前登录用户
@@ -55,12 +59,12 @@ public class SysUserController {
                 sysUserMapper.selectById(currentUserId);
 
         if (currentUser == null) {
-            return Result.error(401, "用户不存在或已失效");
+            return error(401, "用户不存在或已失效");
         }
 
         // 3. 检查管理员权限
         if (!"ADMIN".equals(currentUser.getRole())) {
-            return Result.error(403, "无权查看用户列表");
+            return error(403, "无权查看用户列表");
         }
 
         // 4. 仅返回安全 DTO，不直接返回 SysUser 实体
@@ -78,11 +82,12 @@ public class SysUserController {
     }
 
     @PostMapping("/register")
-    public Result<Void> register(@Valid @RequestBody UserRegisterRequest request) {
+    public ResponseEntity<Result<Void>> register(
+            @Valid @RequestBody UserRegisterRequest request) {
 
         // 1. 校验请求体
         if (request == null) {
-            return Result.error(400, "请求参数不能为空");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Result.<Void>error(400, "请求参数不能为空"));
         }
 
         // 2. 校验用户名 已通过@Valid包含
@@ -96,7 +101,9 @@ public class SysUserController {
                 .length;
 
         if (usernameBytes > 64) {
-            return Result.error(400, "用户名 UTF-8 字节长度不能超过64");
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(Result.<Void>error(400, "用户名 UTF-8 字节长度不能超过64"));
         }
 
 
@@ -111,11 +118,15 @@ public class SysUserController {
                 .length;
 
         if (passwordBytes < 12) {
-            return Result.error(400, "密码 UTF-8 字节长度不能少于12");
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(Result.<Void>error(400, "密码 UTF-8 字节长度不能少于12"));
         }
 
         if (passwordBytes > 72) {
-            return Result.error(400, "密码 UTF-8 字节长度不能超过72");
+             return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(Result.<Void>error(400, "密码 UTF-8 字节长度不能超过72"));
         }
 
         String username = request.getUsername().trim();
@@ -127,7 +138,9 @@ public class SysUserController {
         );
 
         if (existingUser != null) {
-            return Result.error(409, "用户名已存在");
+            return ResponseEntity
+                    .status(HttpStatus.CONFLICT)
+                    .body(Result.<Void>error(409, "用户名已存在"));
         }
 
         // 5. 创建用户
@@ -146,11 +159,15 @@ public class SysUserController {
             sysUserMapper.insert(user);
         } catch (DuplicateKeyException e) {
             // 并发注册时，另一个请求可能已经插入相同用户名
-            return Result.error(409, "用户名已存在");
+            return ResponseEntity
+                    .status(HttpStatus.CONFLICT)
+                    .body(Result.<Void>error(409, "用户名已存在"));
         }
 
         // 7. 返回结果
-        return Result.success("注册成功");
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(Result.<Void>success("注册成功"));
     }
 
     /*@PostMapping("/login")
@@ -203,7 +220,7 @@ public class SysUserController {
                 || request.getUsername().isBlank()
                 || request.getPassword() == null
                 || request.getPassword().isBlank()) {
-            return Result.error(400, "用户名和密码不能为空");
+            return error(400, "用户名和密码不能为空");
         }
 
         String username = request.getUsername().trim();
@@ -219,7 +236,7 @@ public class SysUserController {
 
         // 1. 验证前先检查是否处于限制期
         if (loginAttemptService.isBlocked(username, ip)) {
-            return Result.error(429, "登录尝试过于频繁，请稍后再试");
+            return error(429, "登录尝试过于频繁，请稍后再试");
         }
 
         // 2. 查询用户
@@ -239,10 +256,10 @@ public class SysUserController {
                     loginAttemptService.recordFailure(username, ip);
 
             if (blocked) {
-                return Result.error(429, "登录尝试过于频繁，请稍后再试");
+                return error(429, "登录尝试过于频繁，请稍后再试");
             }
 
-            return Result.error(401, "用户名或密码错误");
+            return error(401, "用户名或密码错误");
         }
 
         // 5. 登录成功，清除失败记录
@@ -267,7 +284,7 @@ public class SysUserController {
         SysUser user = sysUserMapper.selectById(userId);
 
         if (user == null) {
-            return Result.error(401, "用户不存在或已失效");
+            return error(401, "用户不存在或已失效");
         }
 
         CurrentUserResponse data = new CurrentUserResponse(
@@ -285,13 +302,13 @@ public class SysUserController {
         String token = (String) request.getAttribute("token");
 
         if (token == null) {
-            return Result.error(401, "用户未登录");
+            return error(401, "用户未登录");
         }
 
         boolean invalidated = tokenService.invalidateToken(token);
 
         if (!invalidated) {
-            return Result.error(401, "Token 无效或已失效");
+            return error(401, "Token 无效或已失效");
         }
 
         return Result.success("退出登录成功");

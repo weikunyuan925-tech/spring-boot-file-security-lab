@@ -68,7 +68,7 @@
   | REG-VAL-06 | 密码长度为 12 个字符，且不超过 72 字节      | 成功注册 |
   | REG-VAL-07 | 密码为 73 个 ASCII 字符                     | HTTP 400 |
   | REG-VAL-08 | 密码字符数不超过 72，但 UTF-8 字节数超过 72 | HTTP 400 |
-  | REG-VAL-09 | 注册一个已经存在的用户名                    | HTTP 400 |
+  | REG-VAL-09 | 注册一个已经存在的用户名                    | HTTP 409 |
 
 - 状态：已整改。
 
@@ -198,7 +198,8 @@
           // 数据库删除成功，清理隔离文件
           try {
               Files.deleteIfExists(quarantinePath);
-          } catch (IOException cleanupException) {    
+          } catch (IOException cleanupException) { 
+               log.error("数据库记录已删除，但隔离文件清理失败，fileId={}, quarantinePath={}",id,quarantinePath,cleanupException);
           }
           return Result.success("文件删除成功");
       } catch (InvalidPathException e) {

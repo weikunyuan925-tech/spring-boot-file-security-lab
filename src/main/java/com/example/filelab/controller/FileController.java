@@ -1,6 +1,5 @@
 package com.example.filelab.controller;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.filelab.common.FileUploadException;
 import com.example.filelab.common.Result;
 import com.example.filelab.config.FileStorageConfig;
