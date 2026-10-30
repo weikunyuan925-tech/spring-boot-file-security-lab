@@ -11,6 +11,8 @@ import com.example.filelab.service.FileService;
 import com.example.filelab.service.TokenService;
 import jakarta.servlet.http.HttpServletRequest;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
@@ -19,10 +21,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.InvalidPathException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.*;
 
 import java.util.*;
 
@@ -35,8 +34,9 @@ public class FileController {
     private final FileService fileService;
     private final TokenService tokenService;
     private final FileStorageConfig fileStorageConfig;
+    private static final Logger log = LoggerFactory.getLogger(FileController.class);
     //@Value("${file.upload-dir:uploads}")
-   // @Value("${file.upload-dir}")
+    //@Value("${file.upload-dir}")
 
     private static final long MAX_FILE_SIZE =
             10L * 1024 * 1024;
@@ -390,57 +390,192 @@ public class FileController {
     }
 
     @DeleteMapping("/{id}")
-    public Result deleteFile(@PathVariable("id")  Long id, HttpServletRequest request) {
+    public Result deleteFile(@PathVariable("id") Long id, HttpServletRequest request) {
 
-        // 1. 从拦截器中获取当前登录用户 ID
+        // 1. 获取当前登录用户 ID
         Long userId = (Long) request.getAttribute("userId");
 
         if (userId == null) {
-            return Result.failure(401,"用户未登录");
+            return Result.failure(401, "用户未登录");
         }
 
-        // 2. 查询文件，并同时校验文件所有权
-        LambdaQueryWrapper<FileInfo> wrapper = new LambdaQueryWrapper<>();
+        // 2. 校验参数
+        if (id == null || id <= 0) {
+            return Result.failure(400, "文件 ID 不合法");
+        }
 
-        wrapper.eq(FileInfo::getId, id).eq(FileInfo::getUserId, userId);
+        // 3. 查询文件，同时校验所有权
+        FileInfo fileInfo = fileService.getOwnedFile(id, userId);
 
-        FileInfo fileInfo = fileInfoMapper.selectOne(wrapper);
-
-        // 文件不存在或不属于当前用户，统一返回
         if (fileInfo == null) {
+            // 不区分文件不存在和不属于当前用户
             return Result.failure(404, "文件不存在");
         }
 
+        Path filePath;
+        Path quarantinePath;
+
         try {
-            // 3. 校验文件路径，确保文件位于上传目录中
-            Path uploadRoot = fileStorageConfig.getUploadRoot();
+            // 4. 获取上传目录和隔离目录
+            Path uploadRoot = fileStorageConfig.getUploadRoot().toRealPath();
 
-            Path filePath = Paths.get(fileInfo.getFilePath()).toAbsolutePath().normalize();
+            Path quarantineRoot = fileStorageConfig.getQuarantineRoot().toRealPath();
 
+            // 5. 规范化数据库中的文件路径
+            filePath = Paths.get(fileInfo.getFilePath()).toAbsolutePath().normalize();
+
+            // 6. 检查文件路径是否位于上传目录内
             if (filePath.equals(uploadRoot) || !filePath.startsWith(uploadRoot)) {
-                return Result.failure(400,"非法文件路径");
+
+                log.warn("拒绝删除非法路径文件，fileId={}, userId={}, path={}", id, userId, filePath);
+
+                return Result.failure(400, "非法文件路径");
             }
 
-            // 4. 删除磁盘文件
-            Files.deleteIfExists(filePath);
+            // 7. 检查文件是否存在，不跟随符号链接
+            if (!Files.exists(filePath, LinkOption.NOFOLLOW_LINKS)) {
 
-            LambdaQueryWrapper<FileInfo> deleteWrapper =
-                    new LambdaQueryWrapper<>();
+                log.error("数据库存在文件记录，但磁盘文件不存在，fileId={}, path={}", id, filePath);
 
-            deleteWrapper.eq(FileInfo::getId, id)
-                    .eq(FileInfo::getUserId, userId);
+                return Result.failure(404, "磁盘文件不存在");
+            }
 
-            // 5. 删除数据库记录
-            int rows = fileService.deleteOwnedFile(id, userId);
+            // 8. 拒绝符号链接及非普通文件
+            if (Files.isSymbolicLink(filePath) || !Files.isRegularFile(filePath, LinkOption.NOFOLLOW_LINKS)) {
 
+                log.warn("拒绝删除非普通文件或符号链接，fileId={}, path={}", id, filePath);
+
+                return Result.failure(400, "目标文件类型不合法");
+            }
+
+            // 9. 再次确认文件真实路径位于上传目录内
+            Path realFilePath = filePath.toRealPath();
+
+            if (!realFilePath.startsWith(uploadRoot)) {
+                log.warn("文件真实路径超出上传目录，fileId={}, path={}", id, realFilePath);
+
+                return Result.failure(400, "非法文件路径");
+            }
+
+            // 10. 检查隔离目录不能位于上传目录内部
+            if (quarantineRoot.startsWith(uploadRoot)) {
+                log.error("隔离目录不能位于上传目录内部");
+
+                return Result.failure(500, "文件存储配置错误");
+            }
+
+            // 11. 生成随机隔离文件名
+            quarantinePath = quarantineRoot.resolve(UUID.randomUUID() + ".tmp");
+
+            // 12. 先将原文件移动到隔离目录，核心操作Files.move
+            try {
+                Files.move(filePath, quarantinePath, StandardCopyOption.ATOMIC_MOVE);
+
+            } catch (AtomicMoveNotSupportedException e) {
+
+                log.error("当前文件系统不支持原子移动，fileId={}", id, e);
+
+                return Result.failure(500, "文件暂存失败");
+            }
+
+            // 13. 删除数据库记录
+            int rows;
+
+            try {
+                rows = fileService.deleteOwnedFile(id, userId);
+
+            } catch (RuntimeException dbException) {
+
+                // 数据库操作异常，尝试恢复原文件
+                restoreFile(quarantinePath, filePath);
+
+                log.error("删除文件数据库记录时发生异常，fileId={}, userId={}", id, userId, dbException);
+
+                return Result.failure(500, "数据库删除失败");
+            }
+
+            // 14. 检查数据库删除结果
             if (rows != 1) {
-                return Result.failure(500,"数据库记录删除失败");
+
+                // 数据库没有成功删除记录，恢复原文件
+                boolean restored = restoreFile(quarantinePath, filePath);
+
+                if (!restored) {
+                    log.error("数据库删除失败且文件恢复失败，fileId={}, quarantinePath={}", id, quarantinePath);
+
+                    return Result.failure(500, "删除失败，文件已暂存，需人工恢复");
+                }
+
+                return Result.failure(500, "数据库记录删除失败");
+            }
+
+            // 15. 数据库删除成功，清理隔离文件
+            try {
+                // DEL-07 测试：主动模拟隔离文件清理失败
+                //throw new IOException("DEL-07-TEST-CLEANUP-FAILED");
+                Files.deleteIfExists(quarantinePath);
+
+            } catch (IOException cleanupException) {
+
+                // 数据库已经删除成功，不能再返回数据库删除失败
+                log.error("数据库记录已删除，但隔离文件清理失败，fileId={}, quarantinePath={}", id, quarantinePath, cleanupException);
             }
 
             return Result.success("文件删除成功");
 
+        } catch (InvalidPathException e) {
+
+            log.error("数据库中的文件路径格式非法，fileId={}", id, e);
+
+            return Result.failure(400, "文件路径不合法");
+
         } catch (IOException e) {
-            return Result.failure(500,"文件删除失败");
+
+            log.error("文件删除过程中发生磁盘操作异常，fileId={}, userId={}", id, userId, e);
+
+            return Result.failure(500, "文件删除失败");
+        }
+    }
+
+    /**
+     * 将隔离目录中的文件恢复到原始位置。
+     *
+     * @param quarantinePath 隔离文件路径
+     * @param originalPath   原始文件路径
+     * @return 是否恢复成功
+     */
+    private boolean restoreFile(Path quarantinePath, Path originalPath) {
+
+        try {
+
+            // 隔离文件不存在，无法恢复
+            if (!Files.exists(quarantinePath, LinkOption.NOFOLLOW_LINKS)) {
+
+                log.error("恢复失败，隔离文件不存在：{}", quarantinePath);
+
+                return false;
+            }
+
+            // 原始位置已经存在文件时，不覆盖
+            if (Files.exists(originalPath, LinkOption.NOFOLLOW_LINKS)) {
+
+                log.error("恢复失败，原始文件位置已存在其他文件：{}", originalPath);
+
+                return false;
+            }
+
+            // 使用原子移动恢复文件
+            Files.move(quarantinePath, originalPath, StandardCopyOption.ATOMIC_MOVE);
+
+            log.info("文件恢复成功，原始路径：{}", originalPath);
+
+            return true;
+
+        } catch (IOException e) {
+
+            log.error("文件恢复失败，隔离路径：{}，原始路径：{}", quarantinePath, originalPath, e);
+
+            return false;
         }
     }
 }

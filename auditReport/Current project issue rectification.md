@@ -116,40 +116,136 @@
 
 ### A04：Token 和登录限流是单机内存方案
 
-文件：
+- 代码文件和方法：TokenService.java/LoginAttemptService.java
 
-- [TokenService.java](https://github.com/weikunyuan925-tech/spring-boot-file-security-lab/blob/main/src/main/java/com/example/filelab/service/TokenService.java?utm_source=chatgpt.com)
-- [LoginAttemptService.java](https://github.com/weikunyuan925-tech/spring-boot-file-security-lab/blob/main/src/main/java/com/example/filelab/service/LoginAttemptService.java?utm_source=chatgpt.com)
+- 可能影响：当前都使用 `ConcurrentHashMap` 保存状态。
 
-当前两者都使用 `ConcurrentHashMap` 保存状态。
+- 限制：1.应用重启后，已签发的 Token 和登录失败计数都会丢失。
 
-这对你的本地学习项目是合理的简化方案，但有两个限制：
+  ​           2.如果部署多个应用实例，每个实例的 Token 和失败计数互不共享。
 
-1. 应用重启后，已签发的 Token 和登录失败计数都会丢失。
-2. 如果部署多个应用实例，每个实例的 Token 和失败计数互不共享。
+- 状态：目前阶段先保留，后续再考虑使用共享存储管理会话和限流状态。
 
-第二点尤其需要注意：多实例部署时，同一个 Token 在一个实例中签发，不一定能在另一个实例中验证成功；攻击者也可能利用不同实例分别尝试登录。
 
-建议把这项记录为架构限制，而不是当前已确认的漏洞。单机学习阶段可以先保留，后续再考虑使用共享存储管理会话和限流状态。
 
-### A06：文件删除的磁盘与数据库一致性
+### A05：文件删除的磁盘与数据库一致性
 
-文件：[FileController.java](https://github.com/weikunyuan925-tech/spring-boot-file-security-lab/blob/main/src/main/java/com/example/filelab/controller/FileController.java?utm_source=chatgpt.com)
+- 代码文件和方法：FileController.java
 
-当前删除流程先删除磁盘文件，再删除数据库记录。
 
-如果磁盘删除成功，但数据库删除失败，就可能出现数据库中仍保留记录、实际文件却已不存在的情况。
+- 可能影响：磁盘文件删除与数据库记录删除是两个独立操作，缺少失败补偿机制，数据库删除失败时可能出现数据库记录仍存在但磁盘文件已经丢失的情况。
 
-建议明确失败处理策略，并增加测试验证：
 
-- 正常删除：磁盘文件和数据库记录都被删除。
-- 数据库删除失败：系统能否识别并记录不一致状态。
-- 磁盘文件已不存在：接口能否安全处理并按约定清理数据库记录。
-- 删除其他用户文件：仍然返回受控的不存在或无权访问响应。
+- 修复建议：文件删除操作增加隔离目录和失败补偿机制。删除数据库记录前先将文件移动到隔离目录；数据库删除失败时尝试恢复原文件；数据库删除成功后清理隔离文件。同时增加路径校验、普通文件检查及并发删除测试。
 
-你目前的所有权查询条件包含文件 ID 和用户 ID，这是正确的方向，不要为了处理一致性问题而去掉它。
+  ```java
+  //删除逻辑
+  Path filePath;
+  Path quarantinePath;
+      try {
+          // 获取上传目录和隔离目录
+          Path uploadRoot = fileStorageConfig.getUploadRoot().toRealPath();
+          Path quarantineRoot = fileStorageConfig.getQuarantineRoot().toRealPath();
+          // 规范化数据库中的文件路径
+          filePath = Paths.get(fileInfo.getFilePath()).toAbsolutePath().normalize();
+          // 检查文件路径是否位于上传目录内
+          if (filePath.equals(uploadRoot) || !filePath.startsWith(uploadRoot)) {    
+              return Result.failure(400, "非法文件路径");
+          }
+          // 检查文件是否存在，不跟随符号链接
+          if (!Files.exists(filePath, LinkOption.NOFOLLOW_LINKS)) {
+              return Result.failure(404, "磁盘文件不存在");
+          }
+          // 拒绝符号链接及非普通文件
+          if (Files.isSymbolicLink(filePath) || !Files.isRegularFile(filePath, LinkOption.NOFOLLOW_LINKS)) {
+              return Result.failure(400, "目标文件类型不合法");
+          }
+          // 再次确认文件真实路径位于上传目录内
+          Path realFilePath = filePath.toRealPath();
+          if (!realFilePath.startsWith(uploadRoot)) {
+              return Result.failure(400, "非法文件路径");
+          }
+          // 检查隔离目录不能位于上传目录内部
+          if (quarantineRoot.startsWith(uploadRoot)) {    
+              return Result.failure(500, "文件存储配置错误");
+          }
+          // 生成随机隔离文件名
+          quarantinePath = quarantineRoot.resolve(UUID.randomUUID() + ".tmp");
+          // 先将原文件移动到隔离目录，核心操作Files.move
+          try {
+              Files.move(filePath, quarantinePath, StandardCopyOption.ATOMIC_MOVE);
+          } catch (AtomicMoveNotSupportedException e) {
+              return Result.failure(500, "文件暂存失败");
+          }
+          // 删除数据库记录
+          int rows;
+          try {
+              rows = fileService.deleteOwnedFile(id, userId);
+          } catch (RuntimeException dbException) {
+              // 数据库操作异常，尝试恢复原文件
+              restoreFile(quarantinePath, filePath);
+              return Result.failure(500, "数据库删除失败");
+          }
+          // 检查数据库删除结果
+          if (rows != 1) {
+              // 数据库没有成功删除记录，恢复原文件
+              boolean restored = restoreFile(quarantinePath, filePath);
+              if (!restored) {
+                  return Result.failure(500, "删除失败，文件已暂存，需人工恢复");
+              }
+              return Result.failure(500, "数据库记录删除失败");
+          }
+          // 数据库删除成功，清理隔离文件
+          try {
+              Files.deleteIfExists(quarantinePath);
+          } catch (IOException cleanupException) {    
+          }
+          return Result.success("文件删除成功");
+      } catch (InvalidPathException e) {
+          return Result.failure(400, "文件路径不合法");
+      } catch (IOException e) {
+          return Result.failure(500, "文件删除失败");
+      }
+  }
+  //将隔离目录中的文件恢复到原始位置。
+  private boolean restoreFile(Path quarantinePath, Path originalPath) {
+      try {
+          // 隔离文件不存在，无法恢复
+          if (!Files.exists(quarantinePath, LinkOption.NOFOLLOW_LINKS)) {   
+              return false;
+          }
+          // 原始位置已经存在文件时，不覆盖
+          if (Files.exists(originalPath, LinkOption.NOFOLLOW_LINKS)) {
+              return false;
+          }
+          // 使用原子移动恢复文件
+          Files.move(quarantinePath, originalPath, StandardCopyOption.ATOMIC_MOVE);
+          return true;
+      } catch (IOException e) {
+          return false;
+      }
+  }
+  ```
 
-### A07：注册接口存在并发竞态
+- 复测方法：
+
+- | 编号   | 测试步骤                                                     | 结果                                                         |
+  | ------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
+  | DEL-01 | 用户 A 上传文件，再删除自己的文件                            | 成功，临时文件区有文件，后面数据库，临时区，原文件区均删除   |
+  | DEL-02 | 用户 A 尝试删除用户 B 的文件                                 | 返回 404，文件和数据库记录均保留                             |
+  | DEL-03 | 删除不存在的文件 ID                                          | 返回 404，文件不存在                                         |
+  | DEL-04 | 手动删除磁盘文件，再调用删除接口                             | 返回404，数据库存在文件记录，但磁盘文件不存在，fileId=51, path=C:\Users\***\filelab-uploads\*.pdf |
+  | DEL-05 | 模拟数据库删除失败，<br />步骤：1.开发环境临时修改 FileService.deleteOwnedFile()，让它返回 0；<br />2.调用删除接口。 | 返回500，数据库删除失败，文件恢复成功，原始路径：C:\Users\***\filelab-uploads\*.pdf |
+  | DEL-06 | 修改数据库文件路径，使其指向上传目录外                       | 返回400，拒绝删除非法路径文件，fileId=51, userId=**, path=C:\Users\8888\Desktop\素材库\图片1.png |
+  | DEL-07 | 模拟隔离文件清理失败<br />步骤：1.在删除临时文件中Files.deleteIfExists(quarantinePath)后直接抛出异常来主动模拟隔离文件清理失败，throw new IOException("DEL-07-TEST-CLEANUP-FAILED");  <br />2.后调用删除接口。 | 数据库记录已删除，但隔离文件清理失败，fileId=51, quarantinePath=C:\Users\2222\filelab-quarantine\666.tmp |
+  | DEL-08 | 两个请求同时删除同一个文件<br />步骤：使用Apache JMeter测试并发，第一步：创建测试计划，打开 JMeter 后：「测试计划」「线程组」，在右侧设置：线程数（用户数）2，Ramp-Up 时间（秒）1，循环次数1<br />第二步：添加同步定时器，为了尽量让两个请求同时发出：「线程组」「添加」→「定时器」→「同步定时器」，模拟用户组的数量2，超时时间（毫秒）5000<br />第三步：添加 HTTP 请求，「线程组」「添加」→「取样器」→「HTTP 请求」，名称：DEL-08-并发删除，协议：http，服务器名称或 IP：localhost，端口号：8080，方法：DELETE，路径：/api/file/文件ID<br />配置 Authorization 请求头，「线程组」「添加」→「配置元件」→「HTTP 信息头管理器」。添加一行：Authorization `Bearer 有效Token`<br />添加结果查看器，「线程组」，选择「添加」→「监听器」→「察看结果树」。再添加一个「汇总报告」，方便查看两个请求的结果。<br />执行测试，点击 JMeter 上方绿色三角形「启动」。 | 两个请求同时删除同一个文件，只有一个请求返回成功；另一个请求返回明确的失败结果；最终数据库记录和原始文件均不存在 |
+
+- 状态：文件删除操作增加隔离目录和失败补偿机制。删除数据库记录前先将文件移动到隔离目录；数据库删除失败时尝试恢复原文件；数据库删除成功后清理隔离文件。同时增加路径校验、普通文件检查及并发删除测试。
+
+
+
+
+### A06：注册接口存在并发竞态
 
 当前流程是：
 

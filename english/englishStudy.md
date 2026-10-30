@@ -126,3 +126,15 @@ Encryption: Automatic and explicit client side field level encryption.
 GridFS: Large file storage.
 Querydsl: Type-safe query integration.
 Kotlin: Extensions to enrich developer experience.
+
+
+
+The Apache Cassandra NoSQL Database offers many new capabilities for teams seeking a solution to handle high velocity, high volume and variable data flows. This new way of thinking introduces new concepts and a learning curve that can be intimidating to team members and team managers. Spring Data for Apache Cassandra offers a familiar interface to those who have used other Spring Data modules in the past.
+
+The learning curve for developing applications with Apache Cassandra is significantly reduced when using Spring Data for Apache Cassandra. With the power to stay at a high level with annotated POJOs, or at a low level with high performance data ingestion capabilities, the Spring Data for Apache Cassandra templates are sure to meet every application need.
+
+
+
+Spring Data for Couchbase is part of the umbrella Spring Data project which aims to provide a familiar and consistent Spring-based programming model for new datastores while retaining store-specific features and capabilities.
+
+The Spring Data Couchbase project provides integration with the Couchbase Server database. Key functional areas of Spring Data Couchbase are a POJO centric model for interacting with Couchbase Buckets and easily writing a Repository style data access layer.
