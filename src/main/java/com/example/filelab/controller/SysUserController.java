@@ -221,13 +221,13 @@ public class SysUserController {
             @RequestBody @Valid UserLoginRequest request,
             HttpServletRequest httpRequest) {
 
-        if (request == null
+       /* if (request == null
                 || request.getUsername() == null
                 || request.getUsername().isBlank()
                 || request.getPassword() == null
                 || request.getPassword().isBlank()) {
             return error(400, "用户名和密码不能为空");
-        }
+        }*/
 
         String username = request.getUsername().trim();
 

@@ -1,6 +1,7 @@
 
 package com.example.filelab.service;
 
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.concurrent.ConcurrentHashMap;
@@ -12,7 +13,10 @@ public class LoginAttemptService {
     private static final int MAX_ATTEMPTS = 5;
 
     // 限制时长：15 分钟
-    private static final long LOCK_TIME_MILLIS = 15 * 60 * 1000L;
+    private static final long LOCK_TIME_MILLIS =  15 * 60 * 1000L;
+
+    // 普通失败记录保留时间：30 分钟
+    private static final long RECORD_EXPIRE_MILLIS = 30 * 60 * 1000L;
 
     private final ConcurrentHashMap<String, AttemptRecord> attempts =
             new ConcurrentHashMap<>();
@@ -84,9 +88,44 @@ public class LoginAttemptService {
     public void recordSuccess(String username, String ip) {
         attempts.remove(buildKey(username, ip));
     }
+    
+        /**
+         * 每隔 1 分钟自动清理过期记录。
+         */
+        @Scheduled(fixedDelay = 60000)
+        public void cleanupExpiredAttempts() {
 
-    private static class AttemptRecord {
-        private int failures;
-        private long lockUntil;
-    }
+            long now = System.currentTimeMillis();
+
+            attempts.forEach((key, record) -> {
+
+                synchronized (record) {
+
+                    boolean lockExpired =
+                            record.lockUntil > 0
+                                    && now >= record.lockUntil;
+
+                    boolean recordExpired =
+                            record.lockUntil == 0
+                                    && now - record.lastFailureTime
+                                    >= RECORD_EXPIRE_MILLIS;
+
+                    if (lockExpired || recordExpired) {
+                        attempts.remove(key, record);
+                    }
+                }
+            });
+        }
+
+        /**
+         * 登录失败记录。
+         */
+        private static class AttemptRecord {
+
+            private int failures;
+
+            private long lockUntil;
+
+            private long lastFailureTime;
+        }
 }

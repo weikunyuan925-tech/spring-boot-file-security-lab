@@ -2,7 +2,11 @@ package com.example.filelab.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import lombok.Getter;
+import lombok.Setter;
 
+@Setter
+@Getter
 public class UserRegisterRequest {
 
     @NotBlank(message = "用户名不能为空")
@@ -13,19 +17,4 @@ public class UserRegisterRequest {
     @Size(min = 12, max = 72, message = "密码长度必须为12到72个字符")
     private String password;
 
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
 }
