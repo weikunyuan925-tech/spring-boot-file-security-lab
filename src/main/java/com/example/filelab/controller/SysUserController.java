@@ -1,6 +1,7 @@
 package com.example.filelab.controller;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.filelab.common.Result;
 import com.example.filelab.dto.CurrentUserResponse;
 import com.example.filelab.dto.UserLoginRequest;
@@ -18,6 +19,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -49,7 +51,9 @@ public class SysUserController {
 
 
     @GetMapping("/list")
-    public Result<List<CurrentUserResponse>> list(
+    public Result<Map<String, Object>> list(
+            @RequestParam(defaultValue = "1") long page,
+            @RequestParam(defaultValue = "10") long size,
             HttpServletRequest request) {
 
         // 1. 获取拦截器认证后的用户 ID
@@ -73,18 +77,42 @@ public class SysUserController {
             return error(403, "无权查看用户列表");
         }
 
+        // 检查分页参数
+        if (page < 1 || size < 1 || size > 100) {
+            return error(400, "分页参数不合法");
+        }
+
+        // 执行分页查询
+        Page<SysUser> pageRequest = new Page<>(page, size);
+
+        Page<SysUser> userPage = sysUserMapper.selectPage(
+                pageRequest,
+                Wrappers.<SysUser>lambdaQuery()
+                        .orderByDesc(SysUser::getId)
+        );
+
         // 4. 仅返回安全 DTO，不直接返回 SysUser 实体
-        List<CurrentUserResponse> users =
+        List<CurrentUserResponse> records =
                 sysUserMapper.selectList(null)
                         .stream()
                         .map(user -> new CurrentUserResponse(
                                 user.getId(),
                                 user.getUsername(),
-                                user.getRole()
+                                user.getRole(),
+                                user.getCreateTime()
                         ))
                         .toList();
 
-        return Result.success("获取成功", users);
+        // 返回分页结果
+        Map<String, Object> data = new HashMap<>();
+
+        data.put("records", records);
+        data.put("current", userPage.getCurrent());
+        data.put("size", userPage.getSize());
+        data.put("total", userPage.getTotal());
+        data.put("pages", userPage.getPages());
+
+        return Result.success("查询成功", data);
     }
 
     @PostMapping("/register")
@@ -306,8 +334,8 @@ public class SysUserController {
         CurrentUserResponse data = new CurrentUserResponse(
                 user.getId(),
                 user.getUsername(),
-                user.getRole()
-        );
+                user.getRole(),
+                user.getCreateTime());
 
         return Result.success("获取成功", data);
     }

@@ -361,9 +361,42 @@ private static final String DUMMY_PASSWORD_HASH
 ### A08：登录失败记录缺少独立的定期清理机制
 
 - 代码文件： LoginAttemptService.java
+
 - 复现条件：1.使用测试账号连续登录失败，生成失败记录。--->2.等待记录过期。--->3.不再使用该账号发登录请求。---->检查内存Map，过期记录仍然存在。
+
 - 可能影响： 长期运行时，持续产生且不再被访问的过期记录可能残留在内存中，造成不必要的内存占用。
+
 - 修复建议：1.保留登录成功后的记录清理机制，保留请求时的惰性过期检查，增加定时清理任务，周期性删除已经过期的失败记录，明确失败记录和登录锁定状态的过期时间语义，避免误删有效限制记录。
+
+- ```java
+  // 普通失败记录保留时间：30 分钟
+  private static final long RECORD_EXPIRE_MILLIS = 30 * 60 * 1000L;
+  // 登录成功后清除失败记录。
+      public void recordSuccess(String username, String ip) {
+          attempts.remove(buildKey(username, ip));
+      }
+  // 每隔 1 分钟自动清理过期记录。
+          @Scheduled(fixedDelay = 60000)
+          public void cleanupExpiredAttempts() {
+              long now = System.currentTimeMillis();
+              attempts.forEach((key, record) -> {
+                  synchronized (record) {
+                      boolean lockExpired = record.lockUntil > 0 && now >= record.lockUntil;
+                      boolean recordExpired = record.lockUntil == 0 && now - record.lastFailureTime >= RECORD_EXPIRE_MILLIS;
+                      if (lockExpired || recordExpired) {
+                          attempts.remove(key, record);
+                      }
+                  }
+              });
+          }
+  // 登录失败记录。
+          private static class AttemptRecord {
+              private int failures;
+              private long lockUntil;
+              private long lastFailureTime;
+          }
+  ```
+
 - 复测方法：使用测试账号生成失败记录，等待记录过期，在不再次发起登录请求的情况下，检查定时清理任务是否能够删除对应记录。
 
 | 编号           | 测试内容                                | 结果                          |
@@ -377,3 +410,95 @@ private static final String DUMMY_PASSWORD_HASH
 | LOGIN-CLEAN-07 | 多个账号同时产生失败记录                | 不同记录互不影响              |
 
 - 状态：通过（本轮动态复测）。
+
+
+
+### A9：管理员用户列表接口缺少分页限制
+
+- 代码文件：SysUserController.java — list()
+
+- 复现条件：原用户列表接口一次性查询并返回全部用户记录，没有限制单次查询的数据量。
+
+- 可能影响： 用户数量增加后，数据库查询和应用内存消耗可能增大。响应数据量过大，增加网络传输和接口处理开销。攻击者可能通过频繁调用接口增加服务器资源消耗。
+
+- 修复建议：使用MyBatis-Plus分页查询。增加page和size参数。限制每页最大记录数为100。使用DTO返回数据，避免泄露密码哈希等敏感字段。
+
+  ```java
+  //pom文件加依赖
+  <!-- MyBatis-Plus 分页插件依赖 -->
+  <dependency>
+      <groupId>com.baomidou</groupId>
+      <artifactId>mybatis-plus-jsqlparser</artifactId>
+      <version>3.5.9</version>
+  </dependency>
+  //config中添加MybatisPlusConfig.java
+  @Configuration
+  public class MybatisPlusConfig {
+      @Bean
+      public MybatisPlusInterceptor mybatisPlusInterceptor() {
+          MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
+          PaginationInnerInterceptor pagination = new PaginationInnerInterceptor(DbType.MYSQL);
+          // 防止查询超过最大页数
+          pagination.setMaxLimit(100L);
+          interceptor.addInnerInterceptor(pagination);
+          return interceptor;
+      }
+  }
+  //SysUserController.java增加分页查询逻辑
+  @GetMapping("/list")
+  public Result<Map<String, Object>> listUsers(@RequestParam(defaultValue = "1") long page,@RequestParam(defaultValue = "10") long size,HttpServletRequest request) {
+      // 1. 获取当前登录用户 ID
+      Long userId = (Long) request.getAttribute("userId");
+      if (userId == null) {
+          return error(401, "未登录或登录已失效");
+      }
+      // 2. 检查管理员权限
+      SysUser currentUser = sysUserMapper.selectById(userId);
+      if (currentUser == null || !"ADMIN".equals(currentUser.getRole())) {
+          return error(403, "无权访问");
+      }
+      // 3. 检查分页参数
+      if (page < 1 || size < 1 || size > 100) {
+          return error(400, "分页参数不合法");
+      }
+      // 4. 执行分页查询
+      Page<SysUser> pageRequest = new Page<>(page, size);
+      Page<SysUser> userPage = sysUserMapper.selectPage(pageRequest,Wrappers.<SysUser>lambdaQuery().orderByDesc(SysUser::getId));
+      // 5. 转换为安全 DTO
+      List<CurrentUserResponse> records = userPage.getRecords().stream().map(user -> new CurrentUserResponse(user.getId(),user.getUsername(),user.getRole(),user.getCreateTime())).toList();
+      // 6. 返回分页结果
+      Map<String, Object> data = new HashMap<>();
+      data.put("records", records);
+      data.put("current", userPage.getCurrent());
+      data.put("size", userPage.getSize());
+      data.put("total", userPage.getTotal());
+      data.put("pages", userPage.getPages());
+      return Result.success("查询成功", data);
+  }
+  ```
+
+- 复测方法：使用Postman测试正常分页、非法分页参数、超出最大分页数量以及普通用户越权访问。
+
+  1.get http://localhost:8080/api/user/list?page=1&size=1
+
+  {"code": 200,"message": "查询成功","data": {"current": 1,"total": 6,"pages": 6,"size": 1,"records": [{"id": xxx,"username": "QQ","role": "USER"},
+
+  {"id": xxx,"username": "tom","role": "USER"},
+
+  {"id": xxx,"username": "alice","role": "USER"},
+
+  {"id": xxx,"username": "boss","role": "ADMIN"},
+
+  {"id": xx,"username": "race_test_001","role": "USER"},
+
+  {"id": xxx,"username": "xxx","role": "USER"}]}}
+
+  2.get http://localhost:8080/api/user/list?page=1&size=10000 /http://localhost:8080/api/user/list?page=0&size=10
+
+  "code": 400,"message": "分页参数不合法"
+
+  3.http://localhost:8080/api/user/list?page=1&size=10，用普通用户访问list接口
+
+  "code": 403,"message": "无权查看用户列表"
+
+- 状态：通过。

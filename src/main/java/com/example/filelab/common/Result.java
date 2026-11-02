@@ -1,5 +1,7 @@
 package com.example.filelab.common;
 
+import java.util.Map;
+
 public class Result<T> {
 
     private Integer code;

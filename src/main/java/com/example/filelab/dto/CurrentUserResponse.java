@@ -1,5 +1,7 @@
 package com.example.filelab.dto;
 
+import java.time.LocalDateTime;
+
 //不直接传用户user，因为其中又password在里面
 public class CurrentUserResponse {
 
@@ -7,7 +9,7 @@ public class CurrentUserResponse {
     private String username;
     private String role;
 
-    public CurrentUserResponse(Long id, String username, String role) {
+    public CurrentUserResponse(Long id, String username, String role, LocalDateTime createTime) {
         this.id = id;
         this.username = username;
         this.role = role;
