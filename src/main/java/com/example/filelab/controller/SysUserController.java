@@ -31,6 +31,12 @@ public class SysUserController {
     private final TokenService tokenService;
     private final PasswordEncoder passwordEncoder;
     private final LoginAttemptService loginAttemptService;
+    /**
+     * 固定 BCrypt 哈希值
+     * 用于不存在的用户名进行密码校验，降低账号枚举的时间差异
+     */
+    private static final String DUMMY_PASSWORD_HASH =
+            "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 
     public SysUserController(
             SysUserMapper sysUserMapper,
@@ -87,7 +93,7 @@ public class SysUserController {
 
         // 1. 校验请求体
         if (request == null) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Result.<Void>error(400, "请求参数不能为空"));
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Result.error(400, "请求参数不能为空"));
         }
 
         // 2. 校验用户名 已通过@Valid包含
@@ -103,7 +109,7 @@ public class SysUserController {
         if (usernameBytes > 64) {
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
-                    .body(Result.<Void>error(400, "用户名 UTF-8 字节长度不能超过64"));
+                    .body(Result.error(400, "用户名 UTF-8 字节长度不能超过64"));
         }
 
 
@@ -120,13 +126,13 @@ public class SysUserController {
         if (passwordBytes < 12) {
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
-                    .body(Result.<Void>error(400, "密码 UTF-8 字节长度不能少于12"));
+                    .body(Result.error(400, "密码 UTF-8 字节长度不能少于12"));
         }
 
         if (passwordBytes > 72) {
              return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
-                    .body(Result.<Void>error(400, "密码 UTF-8 字节长度不能超过72"));
+                    .body(Result.error(400, "密码 UTF-8 字节长度不能超过72"));
         }
 
         String username = request.getUsername().trim();
@@ -140,7 +146,7 @@ public class SysUserController {
         if (existingUser != null) {
             return ResponseEntity
                     .status(HttpStatus.CONFLICT)
-                    .body(Result.<Void>error(409, "用户名已存在"));
+                    .body(Result.error(409, "用户名已存在"));
         }
 
         // 5. 创建用户
@@ -212,7 +218,7 @@ public class SysUserController {
 
     @PostMapping("/login")
     public Result<Map<String, String>> login(
-            @RequestBody UserLoginRequest request,
+            @RequestBody @Valid UserLoginRequest request,
             HttpServletRequest httpRequest) {
 
         if (request == null
@@ -245,13 +251,23 @@ public class SysUserController {
                         .eq(SysUser::getUsername, username)
         );
 
-        // 3. 统一验证用户名与密码
-        if (user == null
-                || !passwordEncoder.matches(
-                request.getPassword(),
-                user.getPassword())) {
+        // 3. 选择实际密码哈希
+        // 用户存在：使用数据库中的密码哈希
+        // 用户不存在：使用固定 BCrypt 哈希
+        String passwordHash = (user != null)
+                ? user.getPassword()
+                : DUMMY_PASSWORD_HASH;
 
-            // 4. 记录失败次数
+        // 4. 无论用户是否存在，都执行一次 BCrypt 校验
+        boolean passwordMatches = passwordEncoder.matches(
+                request.getPassword(),
+                passwordHash
+        );
+
+        // 5. 统一验证用户名与密码
+        if (user == null || !passwordMatches) {
+
+            // 记录失败次数
             boolean blocked =
                     loginAttemptService.recordFailure(username, ip);
 
@@ -262,10 +278,10 @@ public class SysUserController {
             return error(401, "用户名或密码错误");
         }
 
-        // 5. 登录成功，清除失败记录
+        // 6. 登录成功，清除失败记录
         loginAttemptService.recordSuccess(username, ip);
 
-        // 6. 创建 Token
+        // 7. 创建 Token
         String token = tokenService.createToken(user.getId());
 
         return Result.success(

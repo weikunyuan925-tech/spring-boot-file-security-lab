@@ -314,3 +314,45 @@ return Result.success("注册成功");
 | 应用日志   | 不出现未处理的重复键异常 |
 
 - 状态：通过。
+
+
+
+### A07：登录接口中，对于不存在的用户，程序不会执行 BCrypt 校验；对于存在的用户，会执行 BCrypt 校验。这可能产生响应时间差异。
+
+- 代码文件和方法：SysUserController.java
+
+- 复现条件：于不存在的用户，程序不会执行 BCrypt 校验；对于存在的用户，会执行 BCrypt 校验。这可能产生响应时间差异。
+
+- 可能影响：降低基于响应时间的账号枚举风险。
+
+- 修复建议：对不存在的用户名也执行一次密码校验
+
+
+```java
+//固定一个哈希值
+private static final String DUMMY_PASSWORD_HASH
+    = "******"
+// 用户存在：使用数据库中的密码哈希；用户不存在：使用固定 BCrypt 哈希
+        String passwordHash = (user != null) ? user.getPassword() : DUMMY_PASSWORD_HASH;
+// 无论用户是否存在，都执行一次 BCrypt 校验
+        boolean passwordMatches = passwordEncoder.matches(request.getPassword(),passwordHash);
+```
+
+- 复测方法：JMeter 响应时间对比。
+
+  用JMeter测试修改前后对于不存在的用户相应时间
+
+  修改后，响应时间普遍在60毫秒左右响应完成，
+
+  ![](../picture/9.png)![](../picture/10.png)![](../picture/11.png)![](../picture/12.png)
+
+  测试存在用户，密码错误的响应时间60-70毫秒响应
+
+  ![](../picture/13.png)![](../picture/14.png)![](../picture/15.png)![](../picture/16.png)
+
+  修改前：响应时间普遍在几毫秒响应完成
+
+  ![](../picture/17.png)![](../picture/18.png)![](../picture/19.png)![](../picture/20.png)
+
+- 状态：通过（本轮动态复测）。
+
