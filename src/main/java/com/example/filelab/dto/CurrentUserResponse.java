@@ -1,29 +1,22 @@
 package com.example.filelab.dto;
 
-import java.time.LocalDateTime;
+import lombok.Getter;
 
-//不直接传用户user，因为其中又password在里面
+import java.time.LocalDateTime;
+@Getter
+//不直接传用户user，因为其中有password在里面
 public class CurrentUserResponse {
 
     private Long id;
     private String username;
     private String role;
+    private LocalDateTime createTime;
 
     public CurrentUserResponse(Long id, String username, String role, LocalDateTime createTime) {
         this.id = id;
         this.username = username;
         this.role = role;
+        this.createTime = createTime;
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public String getRole() {
-        return role;
-    }
 }

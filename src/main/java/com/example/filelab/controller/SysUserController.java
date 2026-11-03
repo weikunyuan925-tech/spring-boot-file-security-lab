@@ -91,9 +91,9 @@ public class SysUserController {
                         .orderByDesc(SysUser::getId)
         );
 
-        // 4. 仅返回安全 DTO，不直接返回 SysUser 实体
+        // 使用分页查询结果转换 DTO
         List<CurrentUserResponse> records =
-                sysUserMapper.selectList(null)
+                userPage.getRecords()
                         .stream()
                         .map(user -> new CurrentUserResponse(
                                 user.getId(),

@@ -1,8 +1,8 @@
 package com.example.filelab.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.filelab.config.FileStorageConfig;
-import com.example.filelab.dto.FileListItemDTO;
 import com.example.filelab.entity.FileInfo;
 import com.example.filelab.mapper.FileInfoMapper;
 import org.apache.tomcat.util.http.fileupload.FileUploadException;
@@ -13,7 +13,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -27,7 +26,7 @@ public class FileService {
         this.fileStorageConfig = fileStorageConfig;
     }
 
-    public List<FileListItemDTO> listByUserId(Long userId) {
+   /* public List<FileListItemDTO> listByUserId(Long userId) {
 
         // 只查询当前用户拥有的文件
         LambdaQueryWrapper<FileInfo> query = new LambdaQueryWrapper<>();
@@ -38,8 +37,30 @@ public class FileService {
         List<FileInfo> files = fileInfoMapper.selectList(query);
 
         // 转换成只包含必要字段的 DTO
-        return files.stream().map(file -> new FileListItemDTO(file.getId(), file.getOriginalName(), file.getFileSize(), file.getCreateTime())).toList();
+        return files.stream().map(file -> new FileListItemDTO(file.getId(), file.getOriginalName(), file.getFileSize(), file.getContentType(), file.getCreateTime())).toList();
+    }*/
+
+    //增加分页查询
+    public Page<FileInfo> listByUserId(Long userId, long page, long size) {
+        Page<FileInfo> pageParam = new Page<>(page, size);
+
+        LambdaQueryWrapper<FileInfo> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(FileInfo::getUserId, userId)
+                .orderByDesc(FileInfo::getCreateTime);
+
+        return fileInfoMapper.selectPage(pageParam, wrapper);
     }
+
+    //增加管理员查询所有文件记录方法
+    public Page<FileInfo> pageAll(long page, long size) {
+        Page<FileInfo> pageParam = new Page<>(page, size);
+
+        LambdaQueryWrapper<FileInfo> wrapper = new LambdaQueryWrapper<>();
+        wrapper.orderByDesc(FileInfo::getCreateTime);
+
+        return fileInfoMapper.selectPage(pageParam, wrapper);
+    }
+
 
     public FileInfo getOwnedFile(Long fileId, Long userId) {
 

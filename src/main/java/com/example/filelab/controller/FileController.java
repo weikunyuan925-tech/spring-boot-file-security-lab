@@ -1,5 +1,6 @@
 package com.example.filelab.controller;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.filelab.common.FileUploadException;
 import com.example.filelab.common.Result;
 import com.example.filelab.config.FileStorageConfig;
@@ -29,24 +30,25 @@ import java.util.*;
 @RequestMapping("/api/file")
 public class FileController {
 
-    private final FileInfoMapper fileInfoMapper;
-    private final FileService fileService;
-    private final TokenService tokenService;
-    private final FileStorageConfig fileStorageConfig;
     private static final Logger log = LoggerFactory.getLogger(FileController.class);
-    //@Value("${file.upload-dir:uploads}")
-    //@Value("${file.upload-dir}")
-
     private static final long MAX_FILE_SIZE =
             10L * 1024 * 1024;
     private static final Set<String> ALLOWED_EXTENSIONS =
             Set.of(".pdf", ".png", ".jpg", ".jpeg");
+    private final FileInfoMapper fileInfoMapper;
+    private final FileService fileService;
+    //@Value("${file.upload-dir:uploads}")
+    //@Value("${file.upload-dir}")
+    private final TokenService tokenService;
+    private final FileStorageConfig fileStorageConfig;
+
     public FileController(FileInfoMapper fileInfoMapper, FileService fileService, TokenService tokenService, FileStorageConfig fileStorageConfig) {
         this.fileInfoMapper = fileInfoMapper;
         this.fileService = fileService;
         this.tokenService = tokenService;
         this.fileStorageConfig = fileStorageConfig;
     }
+
     //基础签名验证
     private String detectMimeType(MultipartFile file)
             throws IOException {
@@ -87,7 +89,7 @@ public class FileController {
     }
 
     //增加文件名校验方法
-     String sanitizeOriginalName(String rawName) {
+    String sanitizeOriginalName(String rawName) {
 
         if (rawName == null || rawName.isBlank()) {
             return null;
@@ -110,6 +112,7 @@ public class FileController {
 
         return name;
     }
+
     private boolean startsWith(byte[] data, byte[] prefix) {
 
         if (data.length < prefix.length) {
@@ -134,20 +137,17 @@ public class FileController {
         }
 
         return switch (extension.toLowerCase(Locale.ROOT)) {
-            case ".pdf" ->
-                    "application/pdf".equals(detectedMime);
+            case ".pdf" -> "application/pdf".equals(detectedMime);
 
-            case ".png" ->
-                    "image/png".equals(detectedMime);
+            case ".png" -> "image/png".equals(detectedMime);
 
-            case ".jpg", ".jpeg" ->
-                    "image/jpeg".equals(detectedMime);
+            case ".jpg", ".jpeg" -> "image/jpeg".equals(detectedMime);
 
             default -> false;
         };
     }
 
-    @GetMapping("/list")
+    /*@GetMapping("/list")
     public ResponseEntity<Result<List<FileListItemDTO>>> listFiles(@RequestHeader(value = "Authorization", required = false) String authorization) {
 
         // 1. 检查 Authorization 请求头
@@ -174,7 +174,49 @@ public class FileController {
 
         // 5. 返回结果
         return ResponseEntity.ok(Result.success(files));
+    }*/
+
+    @GetMapping("/list")
+    public Result<Map<String, Object>> list(
+            @RequestAttribute("userId") Long userId,
+            @RequestParam(defaultValue = "1") long page,
+            @RequestParam(defaultValue = "10") long size) {
+
+        // 校验分页参数
+        if (page < 1) {
+            return Result.error(400, "页码必须大于等于1");
+        }
+
+        if (size < 1 || size > 100) {
+            return Result.error(400, "每页数量必须在1到100之间");
+        }
+
+        // 根据当前登录用户 ID 查询，不接受客户端传入 userId
+        Page<FileInfo> result = fileService.listByUserId(userId, page, size);
+
+        // 将数据库实体转换为对外 DTO
+        List<FileListItemDTO> records = result.getRecords()
+                .stream()
+                .map(file -> new FileListItemDTO(
+                        file.getId(),
+                        file.getOriginalName(),
+                        file.getFileSize(),
+                        file.getContentType(),
+                        file.getCreateTime()
+                ))
+                .toList();
+
+        // 分页响应数据
+        Map<String, Object> data = new HashMap<>();
+        data.put("records", records);
+        data.put("current", result.getCurrent());
+        data.put("size", result.getSize());
+        data.put("total", result.getTotal());
+        data.put("pages", result.getPages());
+
+        return Result.success("查询成功", data);
     }
+
 
     @PostMapping("/upload")
     public Result<?> upload(@RequestParam("file") MultipartFile file, HttpServletRequest request) {
@@ -233,7 +275,7 @@ public class FileController {
                 return Result.error(400, "文件名或扩展名无效");
             }
 
-           // 提取扩展名并统一转换为小写
+            // 提取扩展名并统一转换为小写
             String extension = originalName.substring(dotIndex)
                     .toLowerCase(Locale.ROOT);
 
@@ -278,7 +320,7 @@ public class FileController {
             // 仅用于本地复现 模拟数据库保存失败
             throw new RuntimeException("A02-TEST-DB-INSERT-FAILED");*/
 
-           //int rows = fileInfoMapper.insert(info);
+            //int rows = fileInfoMapper.insert(info);
 
            /* if (rows != 1) {
                 Files.deleteIfExists(savedPath);
@@ -330,7 +372,7 @@ public class FileController {
     }
 
     @GetMapping("/download/{fileId}")
-    public ResponseEntity<?> downloadFile(@PathVariable("fileId")  Long fileId, @RequestHeader(value = "Authorization", required = false) String authorization) {
+    public ResponseEntity<?> downloadFile(@PathVariable("fileId") Long fileId, @RequestHeader(value = "Authorization", required = false) String authorization) {
 
         // 1. 检查 Authorization 请求头
         if (authorization == null || !authorization.startsWith("Bearer ")) {

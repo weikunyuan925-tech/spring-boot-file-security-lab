@@ -2,6 +2,7 @@
 package com.example.filelab.config;
 
 import jakarta.annotation.PostConstruct;
+import lombok.Getter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 
@@ -15,11 +16,13 @@ public class FileStorageConfig {
     @Value("${file.upload-dir}")
     private String uploadDir;
 
+    @Getter
     private Path uploadRoot;
 
     @Value("${file.quarantine-dir:quarantine}")
     private String quarantineDir;
 
+    @Getter
     private Path quarantineRoot;
 
     @PostConstruct
@@ -56,13 +59,5 @@ public class FileStorageConfig {
         }
 
     }
-
-        public Path getUploadRoot() {
-            return uploadRoot;
-        }
-
-        public Path getQuarantineRoot() {
-            return quarantineRoot;
-        }
 
 }

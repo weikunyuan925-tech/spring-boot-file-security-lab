@@ -1,7 +1,5 @@
 package com.example.filelab.common;
 
-import java.util.Map;
-
 public class Result<T> {
 
     private Integer code;
@@ -25,10 +23,6 @@ public class Result<T> {
 
     public static <T> Result<T> success(String message) {
         return new Result<>(200, message, null);
-    }
-
-    public static <T> Result<T> success(T data) {
-        return new Result<>(200, "success", data);
     }
 
     public static <T> Result<T> failure(
