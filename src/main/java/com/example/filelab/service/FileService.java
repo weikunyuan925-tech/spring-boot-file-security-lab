@@ -5,7 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.filelab.config.FileStorageConfig;
 import com.example.filelab.entity.FileInfo;
 import com.example.filelab.mapper.FileInfoMapper;
-import org.apache.tomcat.util.http.fileupload.FileUploadException;
+import com.example.filelab.common.FileUploadException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
