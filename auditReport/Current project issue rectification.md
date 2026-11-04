@@ -538,7 +538,105 @@ private static final String DUMMY_PASSWORD_HASH
 
 
 
-### A11：管理员用户列表接口缺少分页限制
+### A11：统一管理物理路径
+
+- 代码文件：FileController.java
+
+- 可能影响：
+
+  1.上传根目录直接使用 FileStorageConfig.getUploadRoot() 返回的配置路径，没有统一解析为真实路径，可能导致上传目录本身为符号链接（配置的上传目录看起来是一个文件夹，但它实际上只是一个“指向另一个文件夹的快捷路径”）时，路径比较结果不一致。
+
+  2.下载接口没有明确拒绝文件本身为符号链接的情况。
+
+  3.使用 FileSystemResource 根据路径延迟打开文件，文件检查与实际读取之间存在 TOCTOU 风险。
+
+- 修复建议：
+
+  1. 在 FileStorageConfig 初始化阶段创建目录，并通过 toRealPath() 解析上传目录和隔离目录。
+
+     ```java
+     // 将配置字符串转换为绝对路径并规范化
+     Path configuredUploadRoot = Path.of(uploadDir).toAbsolutePath().normalize();
+     Path configuredQuarantineRoot = Path.of(quarantineDir).toAbsolutePath().normalize();
+     // 创建目录
+     Files.createDirectories(configuredUploadRoot);
+     Files.createDirectories(configuredQuarantineRoot);
+     // 解析真实路径 如果目录自身是符号链接，这里会解析到实际目标目录
+     this.uploadRoot = configuredUploadRoot.toRealPath();
+     this.quarantineRoot = configuredQuarantineRoot.toRealPath();
+     ```
+
+  2. 下载时检查文件路径、真实路径及上传目录边界。明确拒绝符号链接，并使用 NOFOLLOW_LINKS 打开文件。
+
+     ```java
+     //download接口
+     //获取已经解析为真实路径的上传目录
+     Path rootPath = fileStorageConfig.getUploadRoot();
+     //获取数据库中的文件路径
+     Path storedPath = Paths.get(fileInfo.getFilePath()).toAbsolutePath().normalize();
+     //明确拒绝文件本身是符号链接的情况
+                 if (Files.isSymbolicLink(storedPath)) {
+                     log.warn("拒绝下载符号链接文件，fileId={}, userId={}", fileId, userId);
+                     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Result.failure(404, "文件不存在"));
+                 }
+                 // 解析文件真实路径
+                 Path realFilePath = storedPath.toRealPath();
+                 // 检查真实路径必须位于上传目录内
+                 if (realFilePath.equals(rootPath) || !realFilePath.startsWith(rootPath)) {
+                     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Result.failure(404, "文件不存在"));
+                 }
+                 // 检查是否为普通文件，不跟随最终路径上的符号链接
+                 if (Files.isSymbolicLink(realFilePath) || !Files.isRegularFile(realFilePath, LinkOption.NOFOLLOW_LINKS) || !Files.isReadable(realFilePath)) { 
+                  return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Result.failure(404, "文件不存在"));
+                 }
+     ```
+
+  3. 使用 FileChannel 获取文件句柄，通过 InputStreamResource 返回已打开的文件流，减少检查与使用之间的竞争窗口。
+
+     ```
+     // 准备下载文件名
+     String downloadName = fileInfo.getOriginalName();
+                 if (downloadName == null || downloadName.isBlank()) {
+                     downloadName = "download";
+                 }
+                 String disposition = ContentDisposition.attachment().filename(downloadName,StandardCharsets.UTF_8).build().toString();
+                 //通过 NOFOLLOW_LINKS 打开文件，拒绝打开最终路径上的符号链接
+                 FileChannel channel = FileChannel.open(realFilePath, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS);
+                 long contentLength;
+                 try {
+                     // 从已经打开的文件句柄获取文件大小
+                     contentLength = channel.size();
+                 } catch (IOException e) {
+                     channel.close();
+                     throw e;
+                 }
+                 //  使用已经打开的文件句柄构建资源
+                 InputStreamResource resource = new InputStreamResource(Channels.newInputStream(channel));
+                 // 13. 返回文件
+                 // 响应发送使用已经打开的文件句柄，不再重新按路径打开
+                 return ResponseEntity.ok().contentType(MediaType.APPLICATION_OCTET_STREAM).header(HttpHeaders.CONTENT_DISPOSITION, disposition).contentLength(contentLength).body(resource);
+     ```
+
+  4. 删除接口同步采用真实路径进行目录归属校验。
+
+- 复测方法：
+
+- | 编号    | 测试场景                                                     | 结果                                                         |
+  | ------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+  | PATH-01 | 上传目录本身配置为指向实际目录的符号链接（快捷方式）         | 初始化成功，合法文件可以正常下载                             |
+  | PATH-02 | 正常上传文件并下载                                           | HTTP 200，文件内容正确                                       |
+  | PATH-03 | 下载数据库记录的文件路径指向上传目录之外                     | HTTP 404，文件不存在                                         |
+  | PATH-04 | 下载数据库记录指向上传目录内的符号链接文件                   | HTTP 404，文件不存在                                         |
+  | PATH-05 | 下载数据库记录指向普通目录而不是文件                         | HTTP 404，文件不存在                                         |
+  |         | ![](../picture/21.png)                                       |                                                              |
+  | PATH-06 | 检查文件时删除或替换文件<br />先在delete接口的Files.move()，打下断点，随后运行删除接口，删除 race-test.pdf<br />1.文件被删除<br />T1：程序检查 race-test.pdf，文件存在。 <br />T2：程序检查文件是普通文件。<br />T3：程序确认文件位于上传目录。 <br />T4：另一个进程删除 race-test.pdf。即模拟删除文件，自行将文件删除 <br />T5：程序执行 Files.move()。<br />2.文件被替换<br />T1：程序检查 race-test.pdf，是正常文件。<br />T2：程序完成路径校验。 <br />T3：另一个进程将原文件改名。使用powershell<br />$path = "C:\Users\2222\filelab-uploads\xxxc.jpg"<br/>Move-Item $path "$path.bak"<br/>Set-Content -Path $path -Value "replacement test content" <br />T4：另一个进程创建一个新创建的替换文件 race-test.pdf，原文件为xx.bak。 <br />T5：程序执行 Files.move()。 | 1.返回http500，文件删除失败，文件删除过程中发生磁盘操作异常，fileId=60, userId=21122030xxxxx33<br />2.数据库记录删除，原文件留下xx.bak，发现 TOCTOU 风险 |
+  | PATH-07 | 删除普通文件                                                 | 正常完成                                                     |
+
+- 状态：当前实现降低了最终文件组件的符号链接及 TOCTOU 风险，但尚不能保证完全消除父目录组件被并发替换的风险。
+
+
+
+### A10：管理员用户列表接口缺少分页限制
 
 - 代码文件：
 
