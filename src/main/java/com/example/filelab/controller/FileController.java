@@ -197,7 +197,8 @@ public class FileController {
         }
 
         if (file.getSize() > MAX_FILE_SIZE) {
-            return Result.error(413, "单个文件不能超过 10 MiB");
+            ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE);
+            //return Result.error(413, "单个文件不能超过 10 MiB");
         }
 
 
