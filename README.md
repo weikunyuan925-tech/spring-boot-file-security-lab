@@ -1,37 +1,286 @@
 # Spring Boot File Security Lab
 
-This project is a Java application security learning project.
+一个基于 Spring Boot + MySQL 的文件安全学习与实践项目。
 
-It is based on Spring Boot, MySQL, and MyBatis-Plus.
+本项目以文件上传、下载、删除及用户权限管理为核心，通过自主开发业务功能、模拟安全问题、漏洞复现、代码整改和动态测试，逐步学习 Java Web 安全开发与安全审计。
 
-The goal is to learn common Java web vulnerabilities and how to fix them.
+项目不仅关注功能实现，也关注接口权限、文件系统安全、数据库与磁盘数据一致性，以及异常和并发场景下的安全性。
 
-## Features
+## 1. 项目介绍
 
-- User registration
-- User login
-- Simple token authentication
-- File upload
+**项目名称：** spring-boot-file-security-lab
 
-## Tech Stack
+**项目定位：** Java 后端开发与 Web 安全审计实践项目。
 
-- Java 17
-- Spring Boot
-- MyBatis-Plus
-- MySQL
+主要学习目标：
+
+- 掌握 Spring Boot REST API 开发。
+- 理解用户身份认证与角色权限控制。
+- 掌握文件上传、下载和删除的安全设计。
+- 学习常见 Web 安全问题的复现与修复。
+- 使用 Postman、JMeter 进行接口安全测试。
+- 建立漏洞发现、风险分析、代码整改和回归测试的工作流程。
+
+## 2. 技术栈
+
+| 技术 | 用途 |
+|---|---|
+| Java 17 | 后端开发语言 |
+| Spring Boot | Web 应用框架 |
+| Maven | 项目依赖管理和构建 |
+| MySQL | 用户及文件元数据存储 |
+| MyBatis-Plus | 数据库操作及分页查询 |
+| BCrypt | 用户密码哈希存储 |
+| Lombok | 减少 Java 样板代码 |
+| Postman | REST API 功能与安全测试 |
+| Apache JMeter | 并发测试及响应时间分析 |
+| Git / GitHub | 版本控制与项目管理 |
+
+具体 Spring Boot 和 MyBatis-Plus 版本以项目 `pom.xml` 为准。
+
+## 3. 已实现功能
+
+### 3.1 用户模块
+
+- 用户注册
+- 用户登录
+- BCrypt 密码哈希存储
+- Token 身份认证
+- 当前用户信息查询
+- 登录失败次数限制
+- 登录失败记录过期清理
+- 管理员用户列表及分页查询
+- 管理员角色权限检查
+
+### 3.2 文件模块
+
+- 文件上传
+- 用户文件列表查询
+- 文件列表分页
+- 文件下载
+- 文件删除
+- 文件所有权验证
+- 用户之间的文件访问隔离
+
+### 3.3 文件上传安全控制
+
+当前上传功能实施了以下限制：
+
+- 单个文件最大 10 MiB。
+- 允许 `.pdf`、`.png`、`.jpg`、`.jpeg` 扩展名。
+- 检查文件实际内容签名。
+- 校验扩展名与实际文件内容是否匹配。
+- 清理原始文件名中的路径信息和非法字符。
+- 使用随机文件名保存文件。
+- 上传文件保存在本地磁盘，不直接存储在 MySQL 中。
+- 上传目录和隔离目录采用独立配置。
+
+### 3.4 管理员功能
+
+- 管理员用户列表查询及分页。
+- 管理员全部文件列表查询及分页。
+- 展示文件所属用户信息。
+- 管理接口进行服务端角色校验。
+
+## 4. 主要 API 接口
+
+所有需要身份认证的接口使用以下请求头：
+
+```http
+Authorization: Bearer <TOKEN>
+```
+
+### 用户接口
+
+| 请求方式 | 接口 | 功能 |
+|---|---|---|
+| POST | `/api/user/register` | 用户注册 |
+| POST | `/api/user/login` | 用户登录 |
+| GET | `/api/user/me` | 查询当前用户信息 |
+| GET | `/api/user/list` | 管理员分页查询用户 |
+
+### 文件接口
+
+| 请求方式 | 接口 | 功能 |
+|---|---|---|
+| POST | `/api/file/upload` | 上传文件 |
+| GET | `/api/file/list` | 查询当前用户文件列表 |
+| GET | `/api/file/download/{fileId}` | 下载自己的文件 |
+| DELETE | `/api/file/{id}` | 删除自己的文件 |
+
+文件列表分页示例：
+
+```http
+GET /api/file/list?page=1&size=10
+```
+
+### 管理员文件接口
+
+| 请求方式 | 接口 | 功能 |
+|---|---|---|
+| GET | `/api/admin/files` | 管理员查询全部用户文件 |
+
+请求示例：
+
+```http
+GET /api/admin/files?page=1&size=10
+```
+
+普通用户访问管理员接口应被拒绝。
+
+## 5. 安全审计与整改实践
+
+本项目采用以下实践流程：
+
+```text
+发现安全问题
+     ↓
+分析代码与风险
+     ↓
+设计漏洞复现条件
+     ↓
+实施代码整改
+     ↓
+Postman / JMeter 动态测试
+     ↓
+记录测试结果
+     ↓
+回归测试与风险评估
+```
+
+目前已经开展的主要安全审计方向：
+
+| 审计方向 | 实践内容 |
+|---|---|
+| 输入校验 | 用户名、密码及分页参数校验 |
+| 身份认证 | Token 验证及失效处理 |
+| 权限控制 | 用户身份与角色权限检查 |
+| 账号安全 | 登录失败限制及账号枚举风险 |
+| 并发安全 | 用户重复注册及文件并发删除 |
+| 文件上传 | 文件大小、扩展名、文件签名验证 |
+| 文件路径 | 路径规范化、真实路径和符号链接检查 |
+| 文件访问 | 文件所有权验证及用户隔离 |
+| 数据一致性 | 数据库记录与磁盘文件的失败补偿 |
+| 接口安全 | 分页限制、DTO 字段最小化 |
+| 异常处理 | 统一异常响应与内部信息保护 |
+
+### 安全审计记录
+
+项目的详细安全问题、复现步骤、整改代码及测试结果统一保存在：
+
+[`auditReport/`](./auditReport/)
+
+当前阶段重点记录了 A01～A11 等安全问题，并持续补充管理员文件列表等功能的权限和数据最小化测试。
+
+## 6. 本地运行
+
+### 6.1 环境要求
+
+- JDK 17
 - Maven
-- Postman
+- MySQL
+- IntelliJ IDEA（推荐）
 
-## Security Notes
+### 6.2 克隆项目
 
-This project intentionally contains some insecure implementations for learning purposes.
+```bash
+git clone https://github.com/weikunyuan925-tech/spring-boot-file-security-lab.git
 
-These issues will be audited and fixed step by step.
+cd spring-boot-file-security-lab
+```
 
-Known issues:
+### 6.3 配置数据库
 
-- Password is stored in plain text
-- Login endpoint has no rate limit
-- File upload validation is weak
-- Token is stored in memory
-- Some sensitive configuration may be hardcoded
+创建项目使用的 MySQL 数据库：
+
+```sql
+CREATE DATABASE file_security_lab
+CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;
+```
+
+根据本地 MySQL 环境，配置项目的数据库连接信息。
+
+用户表和文件信息表需要按照项目实际 SQL 初始化脚本创建。
+
+注意：不要将真实数据库密码、Token 密钥或其他敏感配置提交到 GitHub。
+
+### 6.4 配置文件存储目录
+
+项目通过环境变量配置文件上传目录和隔离目录。
+
+默认配置：
+
+```yaml
+file:
+  upload-dir: ${FILE_UPLOAD_DIR:${user.home}/filelab-uploads}
+  quarantine-dir: ${FILE_QUARANTINE_DIR:${user.home}/filelab-quarantine}
+```
+
+也可以自行设置环境变量：
+
+```text
+FILE_UPLOAD_DIR
+FILE_QUARANTINE_DIR
+```
+
+上传文件存储在本地文件系统，MySQL 主要保存文件元数据信息。
+
+### 6.5 启动项目
+
+使用 Maven 启动：
+
+```bash
+mvn spring-boot:run
+```
+
+或在 IntelliJ IDEA 中运行 Spring Boot 启动类。
+
+## 7. 当前已知限制与待整改问题
+
+本项目仍处于持续开发与安全验证阶段，不应视为已经完成全部安全整改的生产级文件服务。
+
+目前已知的限制：
+
+**1. Token 和登录失败记录**
+
+当前使用单机内存结构保存部分认证和限流状态。应用重启后状态会丢失，多实例之间也无法共享。
+
+**2. 文件与数据库一致性**
+
+文件系统和数据库属于两个独立资源。虽然已实现隔离目录和失败补偿机制，但应用崩溃、断电等情况下仍可能出现数据不一致。
+
+**3. 文件删除 TOCTOU 风险**
+
+动态测试已复现：文件完成安全检查后被其他进程替换，程序仍可能根据原路径移动替换后的文件，并继续删除数据库记录。
+
+当前实现降低了部分路径和符号链接风险，但尚未完全解决检查对象与实际操作对象的一致性问题。
+
+**4. 管理员文件列表**
+
+已经实现管理员全部文件分页查询及 DTO 转换，仍需完成权限边界、分页参数和响应字段的完整回归验证。
+
+相关整改和测试进度以 `auditReport/` 中的最新记录为准。
+
+## 8. 后续学习计划
+
+- 深入整改文件删除 TOCTOU 风险。
+- 完善文件异常恢复和孤儿文件清理机制。
+- 进一步完善管理员文件管理权限。
+- 使用 CodeQL、Semgrep 等工具开展静态代码分析。
+- 使用 OWASP Dependency-Check 等工具进行依赖漏洞检查。
+- 引入更完善的日志记录和安全审计机制。
+- 开展开源 Spring Boot 项目的安全代码审计。
+- 学习依赖漏洞治理和安全审计报告编写。
+
+## 9. 项目声明
+
+本项目主要用于 Java 后端开发、安全编码和 Web 安全审计学习。
+
+所有漏洞复现及安全测试均应在本地或明确授权的测试环境中进行。
+
+项目目前仍在持续开发和整改中，不代表已经通过正式的安全认证或第三方渗透测试。
+
+---
+
+**持续学习、持续整改、持续验证。**
