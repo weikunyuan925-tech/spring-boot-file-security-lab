@@ -10,19 +10,19 @@ import com.example.filelab.mapper.FileInfoMapper;
 import com.example.filelab.service.FileService;
 import com.example.filelab.service.TokenService;
 import jakarta.servlet.http.HttpServletRequest;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-
 import java.util.*;
 
 
@@ -31,10 +31,8 @@ import java.util.*;
 public class FileController {
 
     private static final Logger log = LoggerFactory.getLogger(FileController.class);
-    private static final long MAX_FILE_SIZE =
-            10L * 1024 * 1024;
-    private static final Set<String> ALLOWED_EXTENSIONS =
-            Set.of(".pdf", ".png", ".jpg", ".jpeg");
+    private static final long MAX_FILE_SIZE = 10L * 1024 * 1024;
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of(".pdf", ".png", ".jpg", ".jpeg");
     private final FileInfoMapper fileInfoMapper;
     private final FileService fileService;
     //@Value("${file.upload-dir:uploads}")
@@ -50,8 +48,7 @@ public class FileController {
     }
 
     //基础签名验证
-    private String detectMimeType(MultipartFile file)
-            throws IOException {
+    private String detectMimeType(MultipartFile file) throws IOException {
 
         byte[] header;
 
@@ -60,26 +57,19 @@ public class FileController {
         }
 
         // PNG 文件签名
-        byte[] pngSignature = {
-                (byte) 0x89, 0x50, 0x4E, 0x47,
-                0x0D, 0x0A, 0x1A, 0x0A
-        };
+        byte[] pngSignature = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
 
         if (startsWith(header, pngSignature)) {
             return "image/png";
         }
 
         // JPEG 文件签名的前三个字节
-        if (header.length >= 3
-                && (header[0] & 0xFF) == 0xFF
-                && (header[1] & 0xFF) == 0xD8
-                && (header[2] & 0xFF) == 0xFF) {
+        if (header.length >= 3 && (header[0] & 0xFF) == 0xFF && (header[1] & 0xFF) == 0xD8 && (header[2] & 0xFF) == 0xFF) {
             return "image/jpeg";
         }
 
         // PDF 文件头
-        byte[] pdfSignature =
-                "%PDF-".getBytes(StandardCharsets.US_ASCII);
+        byte[] pdfSignature = "%PDF-".getBytes(StandardCharsets.US_ASCII);
 
         if (startsWith(header, pdfSignature)) {
             return "application/pdf";
@@ -101,12 +91,7 @@ public class FileController {
         name = name.substring(name.lastIndexOf('/') + 1).trim();
 
         // 文件名长度、特殊名称和控制字符检查
-        if (name.isEmpty()
-                || name.equals(".")
-                || name.equals("..")
-                || name.length() > 255
-                || name.contains(":")
-                || name.chars().anyMatch(Character::isISOControl)) {
+        if (name.isEmpty() || name.equals(".") || name.equals("..") || name.length() > 255 || name.contains(":") || name.chars().anyMatch(Character::isISOControl)) {
             return null;
         }
 
@@ -128,9 +113,7 @@ public class FileController {
         return true;
     }
 
-    private boolean extensionMatchesMime(
-            String extension,
-            String detectedMime) {
+    private boolean extensionMatchesMime(String extension, String detectedMime) {
 
         if (extension == null || detectedMime == null) {
             return false;
@@ -177,10 +160,7 @@ public class FileController {
     }*/
 
     @GetMapping("/list")
-    public Result<Map<String, Object>> list(
-            @RequestAttribute("userId") Long userId,
-            @RequestParam(defaultValue = "1") long page,
-            @RequestParam(defaultValue = "10") long size) {
+    public Result<Map<String, Object>> list(@RequestAttribute("userId") Long userId, @RequestParam(defaultValue = "1") long page, @RequestParam(defaultValue = "10") long size) {
 
         // 校验分页参数
         if (page < 1) {
@@ -195,16 +175,7 @@ public class FileController {
         Page<FileInfo> result = fileService.listByUserId(userId, page, size);
 
         // 将数据库实体转换为对外 DTO
-        List<FileListItemDTO> records = result.getRecords()
-                .stream()
-                .map(file -> new FileListItemDTO(
-                        file.getId(),
-                        file.getOriginalName(),
-                        file.getFileSize(),
-                        file.getContentType(),
-                        file.getCreateTime()
-                ))
-                .toList();
+        List<FileListItemDTO> records = result.getRecords().stream().map(file -> new FileListItemDTO(file.getId(), file.getOriginalName(), file.getFileSize(), file.getContentType(), file.getCreateTime())).toList();
 
         // 分页响应数据
         Map<String, Object> data = new HashMap<>();
@@ -251,8 +222,7 @@ public class FileController {
                 originalName = "unknown";
             }*/
 
-            String originalName =
-                    sanitizeOriginalName(file.getOriginalFilename());
+            String originalName = sanitizeOriginalName(file.getOriginalFilename());
 
             if (originalName == null) {
                 return Result.error(400, "文件名非法或长度超出限制");
@@ -276,8 +246,7 @@ public class FileController {
             }
 
             // 提取扩展名并统一转换为小写
-            String extension = originalName.substring(dotIndex)
-                    .toLowerCase(Locale.ROOT);
+            String extension = originalName.substring(dotIndex).toLowerCase(Locale.ROOT);
 
             // 只允许白名单中的文件扩展名
             if (!ALLOWED_EXTENSIONS.contains(extension)) {
@@ -294,10 +263,7 @@ public class FileController {
             // 无法识别文件类型，或者扩展名与实际类型不匹配时，拒绝上传
             if (!extensionMatchesMime(extension, detectedMime)) {
 
-                return Result.error(
-                        400,
-                        "文件扩展名与实际内容不匹配"
-                );
+                return Result.error(400, "文件扩展名与实际内容不匹配");
             }
 
             /*String storedName = UUID.randomUUID() + extension;
@@ -330,23 +296,9 @@ public class FileController {
             return Result.success("上传成功", Map.of("id", info.getId(), "originalName", info.getOriginalName(), "storedName", info.getStoredName(), "fileSize", info.getFileSize()));
 */
 
-            FileInfo info = fileService.storeUploadedFile(
-                    file,
-                    userId,
-                    originalName,
-                    extension,
-                    detectedMime
-            );
+            FileInfo info = fileService.storeUploadedFile(file, userId, originalName, extension, detectedMime);
 
-            return Result.success(
-                    "上传成功",
-                    Map.of(
-                            "id", info.getId(),
-                            "originalName", info.getOriginalName(),
-                            "storedName", info.getStoredName(),
-                            "fileSize", info.getFileSize()
-                    )
-            );
+            return Result.success("上传成功", Map.of("id", info.getId(), "originalName", info.getOriginalName(), "storedName", info.getStoredName(), "fileSize", info.getFileSize()));
 
         /*} catch (IOException e) {
             // 如果保存过程中发生 IO 错误，尝试清理已创建的文件
@@ -400,7 +352,7 @@ public class FileController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Result.failure(404, "文件不存在"));
         }
 
-        // 5. 验证文件物理路径并读取文件
+        /*// 5. 验证文件物理路径并读取文件
         try {
             Path rootPath = fileStorageConfig.getUploadRoot();
 
@@ -426,6 +378,74 @@ public class FileController {
             return ResponseEntity.ok().contentType(MediaType.APPLICATION_OCTET_STREAM).header(HttpHeaders.CONTENT_DISPOSITION, disposition).contentLength(Files.size(realFilePath)).body(resource);
 
         } catch (IOException | InvalidPathException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Result.failure(404, "文件不存在"));
+        }*/
+
+        try {
+            // 4. 获取已经解析为真实路径的上传目录
+            Path rootPath = fileStorageConfig.getUploadRoot();
+
+            // 5. 获取数据库中的文件路径
+            Path storedPath = Paths.get(fileInfo.getFilePath()).toAbsolutePath().normalize();
+
+            // 6. 明确拒绝文件本身是符号链接的情况
+            if (Files.isSymbolicLink(storedPath)) {
+                log.warn("拒绝下载符号链接文件，fileId={}, userId={}", fileId, userId);
+
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Result.failure(404, "文件不存在"));
+            }
+
+            // 7. 解析文件真实路径
+            Path realFilePath = storedPath.toRealPath();
+
+            // 8. 检查真实路径必须位于上传目录内
+            if (realFilePath.equals(rootPath) || !realFilePath.startsWith(rootPath)) {
+
+                log.warn("拒绝下载上传目录之外的文件，fileId={}, userId={}, path={}", fileId, userId, realFilePath);
+
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Result.failure(404, "文件不存在"));
+            }
+
+            // 9. 检查是否为普通文件，不跟随最终路径上的符号链接
+            if (Files.isSymbolicLink(realFilePath) || !Files.isRegularFile(realFilePath, LinkOption.NOFOLLOW_LINKS) || !Files.isReadable(realFilePath)) {
+
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Result.failure(404, "文件不存在"));
+            }
+
+            // 10. 准备下载文件名
+            String downloadName = fileInfo.getOriginalName();
+
+            if (downloadName == null || downloadName.isBlank()) {
+                downloadName = "download";
+            }
+
+            String disposition = ContentDisposition.attachment().filename(downloadName, StandardCharsets.UTF_8).build().toString();
+
+            // 11. 通过 NOFOLLOW_LINKS 打开文件，拒绝打开最终路径上的符号链接
+            FileChannel channel = FileChannel.open(realFilePath, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS);
+
+            long contentLength;
+
+            try {
+                // 从已经打开的文件句柄获取文件大小
+                contentLength = channel.size();
+
+            } catch (IOException e) {
+                channel.close();
+                throw e;
+            }
+
+            // 12. 使用已经打开的文件句柄构建资源
+            InputStreamResource resource = new InputStreamResource(Channels.newInputStream(channel));
+
+            // 13. 返回文件
+            // 响应发送使用已经打开的文件句柄，不再重新按路径打开
+            return ResponseEntity.ok().contentType(MediaType.APPLICATION_OCTET_STREAM).header(HttpHeaders.CONTENT_DISPOSITION, disposition).contentLength(contentLength).body(resource);
+
+        } catch (IOException | InvalidPathException e) {
+
+            log.warn("文件下载失败，fileId={}, userId={}", fileId, userId, e);
+
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Result.failure(404, "文件不存在"));
         }
     }
@@ -455,60 +475,63 @@ public class FileController {
 
         Path filePath;
         Path quarantinePath;
-
         try {
-            // 4. 获取上传目录和隔离目录
-            Path uploadRoot = fileStorageConfig.getUploadRoot().toRealPath();
+            // 4. 获取 FileStorageConfig 已经解析过的真实路径
+            Path uploadRoot = fileStorageConfig.getUploadRoot();
+            Path quarantineRoot = fileStorageConfig.getQuarantineRoot();
 
-            Path quarantineRoot = fileStorageConfig.getQuarantineRoot().toRealPath();
+            // 5. 检查数据库中的文件路径
+            Path storedPath = Paths.get(fileInfo.getFilePath()).toAbsolutePath().normalize();
 
-            // 5. 规范化数据库中的文件路径
-            filePath = Paths.get(fileInfo.getFilePath()).toAbsolutePath().normalize();
+            // 6. 检查文件是否存在，不跟随符号链接
+            if (!Files.exists(storedPath, LinkOption.NOFOLLOW_LINKS)) {
 
-            // 6. 检查文件路径是否位于上传目录内
-            if (filePath.equals(uploadRoot) || !filePath.startsWith(uploadRoot)) {
-
-                log.warn("拒绝删除非法路径文件，fileId={}, userId={}, path={}", id, userId, filePath);
-
-                return Result.failure(400, "非法文件路径");
-            }
-
-            // 7. 检查文件是否存在，不跟随符号链接
-            if (!Files.exists(filePath, LinkOption.NOFOLLOW_LINKS)) {
-
-                log.error("数据库存在文件记录，但磁盘文件不存在，fileId={}, path={}", id, filePath);
+                log.error("数据库存在文件记录，但磁盘文件不存在，fileId={}, path={}", id, storedPath);
 
                 return Result.failure(404, "磁盘文件不存在");
             }
 
-            // 8. 拒绝符号链接及非普通文件
-            if (Files.isSymbolicLink(filePath) || !Files.isRegularFile(filePath, LinkOption.NOFOLLOW_LINKS)) {
+            // 7. 明确拒绝文件本身是符号链接
+            if (Files.isSymbolicLink(storedPath)) {
 
-                log.warn("拒绝删除非普通文件或符号链接，fileId={}, path={}", id, filePath);
+                log.warn("拒绝删除符号链接文件，fileId={}, userId={}, path={}", id, userId, storedPath);
+
+                return Result.failure(400, "不允许删除符号链接");
+            }
+
+            // 8. 拒绝目录、设备文件等非普通文件
+            if (!Files.isRegularFile(storedPath, LinkOption.NOFOLLOW_LINKS)) {
+
+                log.warn("拒绝删除非普通文件，fileId={}, path={}", id, storedPath);
 
                 return Result.failure(400, "目标文件类型不合法");
             }
 
-            // 9. 再次确认文件真实路径位于上传目录内
-            Path realFilePath = filePath.toRealPath();
+            // 9. 解析文件真实路径
+            Path realFilePath = storedPath.toRealPath();
 
-            if (!realFilePath.startsWith(uploadRoot)) {
-                log.warn("文件真实路径超出上传目录，fileId={}, path={}", id, realFilePath);
+            // 10. 使用真实路径检查文件是否属于上传目录
+            if (realFilePath.equals(uploadRoot) || !realFilePath.startsWith(uploadRoot)) {
+
+                log.warn("拒绝删除上传目录之外的文件，fileId={}, userId={}, path={}", id, userId, realFilePath);
 
                 return Result.failure(400, "非法文件路径");
             }
 
-            // 10. 检查隔离目录不能位于上传目录内部
+            // 11. 确认隔离目录不在上传目录内部
             if (quarantineRoot.startsWith(uploadRoot)) {
+
                 log.error("隔离目录不能位于上传目录内部");
 
                 return Result.failure(500, "文件存储配置错误");
             }
 
-            // 11. 生成随机隔离文件名
+            // 12. 后续移动和恢复都使用真实文件路径
+            filePath = realFilePath;
+
             quarantinePath = quarantineRoot.resolve(UUID.randomUUID() + ".tmp");
 
-            // 12. 先将原文件移动到隔离目录，核心操作Files.move
+            // 先移动到隔离目录
             try {
                 Files.move(filePath, quarantinePath, StandardCopyOption.ATOMIC_MOVE);
 
@@ -518,7 +541,6 @@ public class FileController {
 
                 return Result.failure(500, "文件暂存失败");
             }
-
             // 13. 删除数据库记录
             int rows;
 
@@ -527,12 +549,15 @@ public class FileController {
 
             } catch (RuntimeException dbException) {
 
-                // 数据库操作异常，尝试恢复原文件
-                restoreFile(quarantinePath, filePath);
+                boolean restored = restoreFile(quarantinePath, filePath);
 
-                log.error("删除文件数据库记录时发生异常，fileId={}, userId={}", id, userId, dbException);
+                log.error("删除文件数据库记录时发生异常，fileId={}, userId={}, restored={}", id, userId, restored, dbException);
 
-                return Result.failure(500, "数据库删除失败");
+                if (!restored) {
+                    return Result.failure(500, "数据库删除失败，文件恢复失败，需人工处理");
+                }
+
+                return Result.failure(500, "数据库删除失败，文件已恢复");
             }
 
             // 14. 检查数据库删除结果

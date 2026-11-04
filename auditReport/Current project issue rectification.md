@@ -417,7 +417,7 @@ private static final String DUMMY_PASSWORD_HASH
 
 - 代码文件：SysUserController.java — list()
 
-- 复现条件：原用户列表接口一次性查询并返回全部用户记录，没有限制单次查询的数据量。
+- 复现条件：原账户列表接口一次性查询并返回全部用户记录，没有限制单次查询的数据量。
 
 - 可能影响： 用户数量增加后，数据库查询和应用内存消耗可能增大。响应数据量过大，增加网络传输和接口处理开销。攻击者可能通过频繁调用接口增加服务器资源消耗。
 
@@ -479,26 +479,95 @@ private static final String DUMMY_PASSWORD_HASH
 
 - 复测方法：使用Postman测试正常分页、非法分页参数、超出最大分页数量以及普通用户越权访问。
 
-  1.get http://localhost:8080/api/user/list?page=1&size=1
+  | 编号       | 测试内容                                                     | 结果                                                         |
+| :--------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+  | userpage01 | 用admin用户访问userlist接口，<br />get http://localhost:8080/api/user/list?page=1&size=1 | {"code": 200,"message": "查询成功","data": {"current": 1,"total": 6,"pages": 6,"size": 1,"records": [{"id": xxx,"username": "QQ","role": "USER"}, |
+| userpage02 | 用admin用户qq访问userlist接口，<br />get http://localhost:8080/api/user/list?page=1&size=10000 <br />get http://localhost:8080/api/user/list?page=0&size=10 | "code": 400,"message": "分页参数不合法"                      |
+  | userpage03 | 用普通用户qq访问userlist接口，<br />get http://localhost:8080/api/user/list?page=1&size=10 | "code": 403,"message": "无权查看用户列表"                    |
 
-  {"code": 200,"message": "查询成功","data": {"current": 1,"total": 6,"pages": 6,"size": 1,"records": [{"id": xxx,"username": "QQ","role": "USER"},
+- 状态：通过。
 
-  {"id": xxx,"username": "tom","role": "USER"},
 
-  {"id": xxx,"username": "alice","role": "USER"},
 
-  {"id": xxx,"username": "boss","role": "ADMIN"},
+### A10：用户文件列表接口缺少分页限制
 
-  {"id": xx,"username": "race_test_001","role": "USER"},
+- 代码文件：FileController.java
 
-  {"id": xxx,"username": "xxx","role": "USER"}]}}
+- 复现条件：原用户文件列表接口一次性查询并返回全部用户文件记录，没有限制单次查询的数据量。
 
-  2.get http://localhost:8080/api/user/list?page=1&size=10000 /http://localhost:8080/api/user/list?page=0&size=10
+- 可能影响： 用户文件数量增加后，数据库查询和应用内存消耗可能增大。响应数据量过大，增加网络传输和接口处理开销。攻击者可能通过频繁调用接口增加服务器资源消耗。
 
-  "code": 400,"message": "分页参数不合法"
+- 修复建议：使用MyBatis-Plus分页查询。增加page和size参数。限制每页最大记录数为100。使用DTO返回数据，避免泄露密码哈希等敏感字段。
 
-  3.http://localhost:8080/api/user/list?page=1&size=10，用普通用户访问list接口
+  ```java
+  //pom文件加依赖，前面A09已添加
+  
+  //config中添加MybatisPlusConfig.java，A09已添加
+  
+  //FileController.java增加分页查询逻辑
+  @GetMapping("/list")
+      public Result<Map<String, Object>> list(@RequestAttribute("userId") Long userId,@RequestParam(defaultValue = "1") long page,@RequestParam(defaultValue = "10") long size) {
+  // 校验分页参数
+          if (page < 1) { return Result.error(400, "页码必须大于等于1");
+          }
+          if (size < 1 || size > 100) { return Result.error(400, "每页数量必须在1到100之间");
+          }
+          // 根据当前登录用户 ID 查询，不接受客户端传入 userId
+          Page<FileInfo> result = fileService.listByUserId(userId, page, size);
+          // 将数据库实体转换为对外 DTO
+          List<FileListItemDTO> records = result.getRecords().stream().map(file -> new FileListItemDTO(file.getId(),file.getOriginalName(),file.getFileSize(),file.getContentType(),file.getCreateTime())).toList();
+          // 分页响应数据
+          Map<String, Object> data = new HashMap<>();
+          data.put("records", records);
+          data.put("current", result.getCurrent());
+          data.put("size", result.getSize());
+          data.put("total", result.getTotal());
+          data.put("pages", result.getPages());
+          return Result.success("查询成功", data);
+      }
+  ```
 
-  "code": 403,"message": "无权查看用户列表"
+- 复测方法：使用Postman测试正常分页、非法分页参数、超出最大分页数量以及普通用户越权访问。
+
+  | 编号       | 测试内容                                                     | 结果                                                         |
+  | :--------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+  | filepage01 | 用qq用户访问filelist接口，<br />get http://localhost:8080/api/file/list?size=2&page=5 | { "code": 200,"message": "查询成功",  "data": {    "current": 5,    "total": 11,  "pages": 6,  "size": 2, "records": [{"id": 49,"fileName": "VCG41N990985128.jpg", "fileSize": 1017149,"contentType": "image/jpeg","createTime": "2026-10-30T19:37:24" },{"id": 48,        "fileName": "图片1.png","fileSize": 1719293,"contentType": "image/png","createTime": "2026-10-30T19:37:06"}]}} |
+  | filepage02 | 用qq用户访问filelist接口，<br />get http://localhost:8080/api/file/list?size=2000&page=1<br /> get http://localhost:8080/api/file/list?size=-1&page=1 | {"code": 400,"message": "每页数量必须在1到100之间","data": **null**} |
+
+- 状态：通过。
+
+
+
+### A11：管理员用户列表接口缺少分页限制
+
+- 代码文件：
+
+- 复现条件：
+
+- 可能影响： 
+
+- 修复建议：
+
+  
+
+- 复测方法：
+
+- 状态：通过。
+
+
+
+### A10：管理员用户列表接口缺少分页限制
+
+- 代码文件：
+
+- 复现条件：
+
+- 可能影响： 
+
+- 修复建议：
+
+  
+
+- 复测方法：
 
 - 状态：通过。
