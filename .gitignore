@@ -41,3 +41,14 @@ build/
 application-local.yml
 application-local.yaml
 application-local.properties
+
+# Application logs
+*.log
+logs/
+
+# Uploaded files and quarantine
+uploads/
+quarantine/
+
+# Maven Dependency-Check reports and local database
+dependency-check-data/

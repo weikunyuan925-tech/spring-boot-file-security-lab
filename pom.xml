@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.1.1</version>
+		<version>4.1.2</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.example</groupId>
@@ -93,12 +93,35 @@
         </dependency>
     </dependencies>
 
+
+
 	<build>
 		<plugins>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 			</plugin>
+            <plugin>
+                <groupId>org.owasp</groupId>
+                <artifactId>dependency-check-maven</artifactId>
+                <version>13.0.0</version>
+                <configuration>
+
+                    <!-- 从环境变量读取 NVD API Key，不把密钥写入 pom.xml -->
+                    <nvdApiKeyEnvironmentVariable>
+                        NVD_API_KEY
+                    </nvdApiKeyEnvironmentVariable>
+                    <formats>
+                        <format>HTML</format>
+                        <format>JSON</format>
+                    </formats>
+
+                    <outputDirectory>
+                        ${project.build.directory}/dependency-check
+                    </outputDirectory>
+
+                </configuration>
+            </plugin>
 		</plugins>
 	</build>
 
